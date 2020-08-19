@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -11,35 +12,36 @@ import (
 )
 
 /*
-    rename: rename key to key'
-    exclude: exclude key from comparsion
-    aString: convert numbers to string for comparsion
-    coercenull: make null == false, "", {} or [], 0
+   rename: rename key to key'
+   exclude: exclude key from comparsion
+   aString: convert numbers to string for comparsion
+   coercenull: make null == false, "", {} or [], 0
 */
 type ruleAction int
+
 const (
-    rename ruleAction = iota
-    exclude
-    asString
-    coercenull
+	rename ruleAction = iota
+	exclude
+	asString
+	coercenull
 )
 
 type rule struct {
-    selector string
-    action ruleAction
-    newKey string
-    excludedKey string
+	selector    string
+	action      ruleAction
+	newKey      string
+	excludedKey string
 }
 
 func newCoerceNullRule(selector string) *rule {
-    return &rule{selector: selector, action: coercenull}
+	return &rule{selector: selector, action: coercenull}
 }
 
 func (r *rule) match(selector string) bool {
-    if r.selector != "*" {
-        panic("given selector is not implemented")
-    }
-    return true
+	if r.selector != "*" {
+		panic("given selector is not implemented")
+	}
+	return true
 }
 
 // patch contains data about single difference
@@ -52,17 +54,32 @@ type patch struct {
 type patchLines []*patch
 
 type differ struct {
-	lines patchLines
-    rulesA []*rule
-    rulesB []*rule
+	lines  patchLines
+	rulesA []*rule
+	rulesB []*rule
 }
 
-type stringer struct {
+type jsoner interface {
+	JSON() string
+}
+
+type jsonI struct {
 	i interface{}
 }
 
-func (s stringer) String() string {
-	return fmt.Sprintf("%+v", s.i)
+func (i jsonI) JSON() string {
+	var inter interface{}
+	switch v := i.i.(type) {
+	case *objx.Value:
+		inter = v.Data()
+	default:
+		inter = i.i
+	}
+	b, err := json.Marshal(inter)
+	if err != nil {
+		return fmt.Sprintf("%%!marshallError(%s)", err.Error())
+	}
+	return string(b)
 }
 
 func joinSelectors(mainSelector, selector string) string {
@@ -76,72 +93,72 @@ func joinSelectors(mainSelector, selector string) string {
 }
 
 // lineA adds line with empty B value
-func (d *differ) lineA(mainSelector, selector string, valueA fmt.Stringer) {
+func (d *differ) lineA(mainSelector, selector string, valueA jsoner) {
 	d.lines = append(
 		d.lines,
 		&patch{
 			selector: joinSelectors(mainSelector, selector),
-			valueA:   valueA.String(),
+			valueA:   valueA.JSON(),
 			valueB:   "",
 		})
 }
 
-func (d *differ) lineAB(mainSelector, selector string, valueA, valueB fmt.Stringer) {
+func (d *differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
 	d.lines = append(
 		d.lines,
 		&patch{
 			selector: joinSelectors(mainSelector, selector),
-			valueA:   valueA.String(),
-			valueB:   valueB.String(),
+			valueA:   valueA.JSON(),
+			valueB:   valueB.JSON(),
 		})
 }
 
-func (d *differ) lineB(mainSelector, selector string, valueB fmt.Stringer) {
+func (d *differ) lineB(mainSelector, selector string, valueB jsoner) {
 	d.lines = append(
 		d.lines,
 		&patch{
 			selector: joinSelectors(mainSelector, selector),
 			valueA:   "",
-			valueB:   valueB.String(),
+			valueB:   valueB.JSON(),
 		})
 }
 
 func (d *differ) shouldCoerceNull(rules []*rule, selector string) bool {
-    for _, rule := range rules {
-        if rule.match(selector) && rule.action == coercenull {
-            return true
-        }
-    }
-    return false
+	for _, rule := range rules {
+		if rule.match(selector) && rule.action == coercenull {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
-    // 1. coercion rules can solve nil case
-    shouldCoreceA := d.shouldCoerceNull(d.rulesA, selector)
-    shouldCoreceB := d.shouldCoerceNull(d.rulesB, selector)
-    if  (shouldCoreceA && valueA.IsNil()) ||
-        (shouldCoreceB && valueB.IsNil()) {
-            return d.diffValuesCoerced(selector, valueA, valueB, shouldCoreceA, shouldCoreceB)
-    }
-    // 2. types mismatch
-    if reflect.TypeOf(valueA.Data()) != reflect.TypeOf(valueB.Data()) {
-        d.lineAB("", selector, valueA, valueB)
-        return nil
-    }
+	// 1. coercion rules can solve nil case
+	shouldCoreceA := d.shouldCoerceNull(d.rulesA, selector)
+	shouldCoreceB := d.shouldCoerceNull(d.rulesB, selector)
+	if (shouldCoreceA && valueA.IsNil()) ||
+		(shouldCoreceB && valueB.IsNil()) {
+		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoreceA, shouldCoreceB)
+	}
+	// 2. types mismatch
+	if reflect.TypeOf(valueA.Data()) != reflect.TypeOf(valueB.Data()) {
+		d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		return nil
+	}
 
 	switch {
 	case valueA.IsInt():
-        intA := valueA.MustInt()
-        intB := valueB.MustInt()
+		intA := valueA.MustInt()
+		intB := valueB.MustInt()
 		if intA != intB {
-			d.lineAB("", selector, valueA, valueB)
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case valueA.IsStr():
 		strA := valueA.MustStr()
 		strB := valueB.MustStr()
 		if strA != strB {
-			d.lineAB("", selector, valueA, valueB)
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case valueA.IsInterSlice():
 		err := d.diffInterSlice(selector, valueA, valueB)
@@ -165,81 +182,81 @@ func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 // TODO: join together with diffValues
 func (d *differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, coerceA, coerceB bool) error {
 
-    orNil := func(isType func(v *objx.Value)bool, valueA, valueB *objx.Value) bool {
-        return (isType(valueA) || (coerceA && valueA.IsNil())) ||
-               (isType(valueB) || (coerceB && valueB.IsNil()))
-    }
-    isInt := func(valueA, valueB *objx.Value) bool {
-        isTyp := func(v *objx.Value) bool {return v.IsInt()}
-        return orNil(isTyp, valueA, valueB)
-    }
-    isStr := func(valueA, valueB *objx.Value) bool {
-        isTyp := func(v *objx.Value) bool {return v.IsStr()}
-        return orNil(isTyp, valueA, valueB)
-    }
-    isInterSlice := func(valueA, valueB *objx.Value) bool {
-        isTyp := func(v *objx.Value) bool {return v.IsInterSlice()}
-        return orNil(isTyp, valueA, valueB)
-    }
-    isObjxMap := func(valueA, valueB *objx.Value) bool {
-        isTyp := func(v *objx.Value) bool {return v.IsObjxMap()}
-        return orNil(isTyp, valueA, valueB)
-    }
+	orNil := func(isType func(v *objx.Value) bool, valueA, valueB *objx.Value) bool {
+		return (isType(valueA) || (coerceA && valueA.IsNil())) ||
+			(isType(valueB) || (coerceB && valueB.IsNil()))
+	}
+	isInt := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsInt() }
+		return orNil(isTyp, valueA, valueB)
+	}
+	isStr := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsStr() }
+		return orNil(isTyp, valueA, valueB)
+	}
+	isInterSlice := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsInterSlice() }
+		return orNil(isTyp, valueA, valueB)
+	}
+	isObjxMap := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsObjxMap() }
+		return orNil(isTyp, valueA, valueB)
+	}
 
 	switch {
 	case isInt(valueA, valueB):
-        var intA, intB int
-        if coerceA {
-            intA = valueA.Int(0)
-        } else {
-            intA = valueA.MustInt()
-        }
-        if coerceB {
-            intB = valueB.Int(0)
-        } else {
-            intB = valueB.MustInt()
-        }
+		var intA, intB int
+		if coerceA {
+			intA = valueA.Int(0)
+		} else {
+			intA = valueA.MustInt()
+		}
+		if coerceB {
+			intB = valueB.Int(0)
+		} else {
+			intB = valueB.MustInt()
+		}
 		if intA != intB {
-			d.lineAB("", selector, valueA, valueB)
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case isStr(valueA, valueB):
-        var strA, strB string
-        if coerceA {
-            strA = valueA.Str("")
-        } else {
-            strA = valueA.MustStr()
-        }
-        if coerceB {
-            strB = valueB.Str("")
-        } else {
-            strB = valueB.MustStr()
-        }
+		var strA, strB string
+		if coerceA {
+			strA = valueA.Str("")
+		} else {
+			strA = valueA.MustStr()
+		}
+		if coerceB {
+			strB = valueB.Str("")
+		} else {
+			strB = valueB.MustStr()
+		}
 		if strA != strB {
-			d.lineAB("", selector, valueA, valueB)
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case isInterSlice(valueA, valueB):
-        if valueA.IsNil() {
-            valueA = newValue([]interface{}{})
-        }
-        if valueB.IsNil() {
-            valueB = newValue([]interface{}{})
-        }
+		if valueA.IsNil() {
+			valueA = newValue([]interface{}{})
+		}
+		if valueB.IsNil() {
+			valueB = newValue([]interface{}{})
+		}
 		err := d.diffInterSlice(selector, valueA, valueB)
 		if err != nil {
 			return err
 		}
 	case isObjxMap(valueA, valueB):
-        var mA, mB objx.Map
-        if coerceA {
-            mA = valueA.ObjxMap(map[string]interface{}{})
-        } else {
-            mA = valueA.MustObjxMap()
-        }
-        if coerceB {
-		    mB = valueB.ObjxMap(map[string]interface{}{})
-        } else {
-            mB = valueB.MustObjxMap()
-        }
+		var mA, mB objx.Map
+		if coerceA {
+			mA = valueA.ObjxMap(map[string]interface{}{})
+		} else {
+			mA = valueA.MustObjxMap()
+		}
+		if coerceB {
+			mB = valueB.ObjxMap(map[string]interface{}{})
+		} else {
+			mB = valueB.MustObjxMap()
+		}
 		err := d.diffMap(selector, mA, mB)
 		if err != nil {
 			return err
@@ -265,7 +282,7 @@ func (d *differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	iSliceB := valueB.MustInterSlice()
 	for idx, a := range iSliceA {
 		if len(iSliceB) <= idx {
-			d.lineA(mainSelector, fmt.Sprintf("[%d]", idx), stringer{a})
+			d.lineA(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{a})
 			continue
 		}
 		b := iSliceB[idx]
@@ -278,7 +295,7 @@ func (d *differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	if len(iSliceB) > len(iSliceA) {
 		for idx := len(iSliceA); idx != len(iSliceB); idx++ {
 			b := iSliceB[idx]
-			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), stringer{b})
+			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{b})
 		}
 	}
 	return nil
@@ -303,7 +320,7 @@ func (d *differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 		valueA := objA.Get(keyA)
 		// 1. objB missing data
 		if !objB.Has(keyA) {
-			d.lineA(mainSelector, keyA, valueA)
+			d.lineA(mainSelector, keyA, jsonI{valueA})
 			continue
 		}
 		valueB := objB.Get(keyA)
@@ -318,7 +335,7 @@ func (d *differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 		if _, found := visitedKeysA[keyB]; found {
 			continue
 		}
-		d.lineB(mainSelector, keyB, objB.Get(keyB))
+		d.lineB(mainSelector, keyB, jsonI{objB.Get(keyB)})
 	}
 
 	return nil
@@ -336,10 +353,10 @@ func diff(jsA, jsB string) ([]*patch, error) {
 	}
 
 	d := differ{
-        lines: make([]*patch, 0, 64),
-        rulesA: make([]*rule, 0),
-        rulesB: make([]*rule, 0),
-    }
+		lines:  make([]*patch, 0, 64),
+		rulesA: make([]*rule, 0),
+		rulesB: make([]*rule, 0),
+	}
 	err = d.diffMap("", objA, objB)
 	if err != nil {
 		return d.lines, err
@@ -358,18 +375,18 @@ func diff2(jsA, jsB string, rulesA, rulesB []*rule) ([]*patch, error) {
 		return []*patch{}, err
 	}
 
-    if rulesA == nil {
-        rulesA = make([]*rule, 0)
-    }
-    if rulesB == nil {
-        rulesB = make([]*rule, 0)
-    }
+	if rulesA == nil {
+		rulesA = make([]*rule, 0)
+	}
+	if rulesB == nil {
+		rulesB = make([]*rule, 0)
+	}
 
 	d := differ{
-        lines: make([]*patch, 0, 64),
-        rulesA: rulesA,
-        rulesB: rulesB,
-    }
+		lines:  make([]*patch, 0, 64),
+		rulesA: rulesA,
+		rulesB: rulesB,
+	}
 	err = d.diffMap("", objA, objB)
 	if err != nil {
 		return d.lines, err
