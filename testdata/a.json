@@ -1,0 +1,6 @@
+{
+ "number": 42,
+ "string": "hello",
+ "strings": ["hello", "world"],
+ "ints": [4, 2, 1]
+}
