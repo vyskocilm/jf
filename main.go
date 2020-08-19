@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"text/tabwriter"
 )
 
 const (
@@ -37,16 +38,18 @@ func main() {
 	jsA, jsB, err := js(os.Args[1], os.Args[2])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
-        os.Exit(exitTroubles)
+		os.Exit(exitTroubles)
 	}
 
 	lines, err := diff(jsA, jsB)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	for _, p := range lines {
-		fmt.Printf("%s\t%s\t%s\n", p.selector, p.valueA, p.valueB)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", p.selector, p.valueA, p.valueB)
 	}
 
-    if len(lines) == 0 {
-        os.Exit(exitNoDiff)
-    }
-    os.Exit(exitDiff)
+	if len(lines) == 0 {
+		os.Exit(exitNoDiff)
+	}
+	w.Flush()
+	os.Exit(exitDiff)
 }
