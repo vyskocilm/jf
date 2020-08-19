@@ -34,10 +34,10 @@ Compare arbitrary nested JSONS key by key.
  "ints": [4, 2, 99]
 }
 ------------------------------
-ints[2]     1       99
-number      42      43
-string      hello   hellp
-strings[1]  world   worle
+ints[2]    1       99
+number     42      43
+string     "hello" "hellp"
+strings[1] "world" "worle"
 ```
 
 ## Nested maps
@@ -61,5 +61,5 @@ strings[1]  world   worle
  }
 }
 ------------------------------
-key.subkey.name joe Joe
+key.subkey.name "joe" "Joe"
 ```
