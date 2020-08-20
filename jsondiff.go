@@ -15,12 +15,14 @@ import (
 /*
    coercenull: make null == false, "", {} or [], 0
    ignore: ignore matching keys
+   orderby: sort slice of maps
 */
 type ruleAction int
 
 const (
 	coercenull ruleAction = iota
 	ignore
+    orderby
 )
 
 type jsoner interface {
@@ -61,6 +63,7 @@ type rule struct {
 	action      ruleAction
 	newKey      string
 	excludedKey string
+    orderObjxSlice func([]objx.Map)
 }
 
 func newCoerceNullRule(selector string) (*rule, error) {
@@ -68,6 +71,19 @@ func newCoerceNullRule(selector string) (*rule, error) {
 }
 func newIgnoreRule(selector string) (*rule, error) {
 	return newRule(selector, ignore)
+}
+
+// FIXME: can't specify the orderding rules
+func newOrderbyKeyRule(selector string, key string) (*rule, error) {
+    r, err := newRule(selector, orderby)
+    r.orderObjxSlice = func(msi []objx.Map) {
+        sort.Slice(msi, func(i, j int) bool {
+            intI := msi[i].Get(key).MustInt()
+            intJ := msi[j].Get(key).MustInt()
+            return intI < intJ
+        })
+    }
+    return r, err
 }
 
 func newRule(selector string, action ruleAction) (*rule, error) {
