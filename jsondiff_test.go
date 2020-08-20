@@ -30,8 +30,8 @@ func TestSimpleMap(t *testing.T) {
 
     assert.Equal(&patch{"ints[2]", "1", "99"}, lines[0])
     assert.Equal(&patch{"number", "42", "43"}, lines[1])
-    assert.Equal(&patch{"string", "hello", "hellp"}, lines[2])
-    assert.Equal(&patch{"strings[1]", "world", "worle"}, lines[3])
+    assert.Equal(&patch{"string", `"hello"`, `"hellp"`}, lines[2])
+    assert.Equal(&patch{"strings[1]", `"world"`, `"worle"`}, lines[3])
 }
 
 // TestDifferentKeys tests the case that in MSI there are different keys
@@ -97,7 +97,7 @@ func TestMapInMap(t *testing.T) {
     lines, err := diff(jsonA, jsonB)
     assert.NoError(err)
 	assert.Len(lines, 1)
-    assert.Equal(&patch{"key.name", "joe", "Joe"}, lines[0])
+    assert.Equal(&patch{"key.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapInMapInMap(t *testing.T) {
@@ -122,7 +122,7 @@ func TestMapInMapInMap(t *testing.T) {
     lines, err := diff(jsonA, jsonB)
     assert.NoError(err)
 	assert.Len(lines, 1)
-    assert.Equal(&patch{"key.subkey.name", "joe", "Joe"}, lines[0])
+    assert.Equal(&patch{"key.subkey.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapSlice(t *testing.T) {
@@ -145,8 +145,8 @@ func TestMapSlice(t *testing.T) {
     lines, err := diff(jsonA, jsonB)
     assert.NoError(err)
 	assert.Len(lines, 2)
-    assert.Equal(&patch{"data[0].name", "one", "One"}, lines[0])
-    assert.Equal(&patch{"data[1].name", "two", "Two"}, lines[1])
+    assert.Equal(&patch{"data[0].name", `"one"`, `"One"`}, lines[0])
+    assert.Equal(&patch{"data[1].name", `"two"`, `"Two"`}, lines[1])
 }
 
 func TestNil(t *testing.T) {
@@ -161,7 +161,7 @@ func TestNil(t *testing.T) {
     lines, err := diff(jsonA, jsonB)
     assert.NoError(err)
 	assert.Len(lines, 1)
-    assert.Equal(&patch{"key", "", "42"}, lines[0])
+    assert.Equal(&patch{"key", "null", "42"}, lines[0])
 }
 
 func TestCoerceNull(t *testing.T) {
@@ -187,7 +187,7 @@ func TestCoerceNull(t *testing.T) {
     lines, err = diff2(jsonA, jsonB, nil, coerceNull)
     assert.NoError(err)
 	assert.Len(lines, 1)
-    assert.Equal(&patch{"key", "", "0"}, lines[0])
+    assert.Equal(&patch{"key", "null", "0"}, lines[0])
     // 3. coercion of A/B, return 0 lines
     lines, err = diff2(jsonA, jsonB, coerceNull, coerceNull)
     assert.NoError(err)
