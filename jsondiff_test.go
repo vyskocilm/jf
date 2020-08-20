@@ -225,3 +225,30 @@ func TestCoerceNullMatch(t *testing.T) {
 	assert.Len(lines, 1)
 	assert.Equal(&patch{"key.subkey2", "null", "0"}, lines[0])
 }
+
+func TestIgnore(t *testing.T) {
+	const jsonA = `{
+        "id": 11
+    }`
+	const jsonB = `{
+        "id": 11,
+        "additional": 42
+    }`
+	assert := assert.New(t)
+
+	ignoreAdditional, err := newIgnoreRule("additional")
+	assert.NoError(err)
+
+	ruleList := []*rule{
+		ignoreAdditional,
+	}
+
+	lines, err := diff2(jsonA, jsonB, ruleList, nil)
+	assert.NoError(err)
+	assert.Len(lines, 1)
+	assert.Equal(&patch{"additional", "", "42"}, lines[0])
+
+	lines, err = diff2(jsonA, jsonB, nil, ruleList)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}

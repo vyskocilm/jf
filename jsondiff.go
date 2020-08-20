@@ -13,18 +13,14 @@ import (
 )
 
 /*
-   rename: rename key to key'
-   exclude: exclude key from comparsion
-   aString: convert numbers to string for comparsion
    coercenull: make null == false, "", {} or [], 0
+   ignore: ignore matching keys
 */
 type ruleAction int
 
 const (
-	rename ruleAction = iota
-	exclude
-	asString
-	coercenull
+	coercenull ruleAction = iota
+	ignore
 )
 
 type jsoner interface {
@@ -68,11 +64,18 @@ type rule struct {
 }
 
 func newCoerceNullRule(selector string) (*rule, error) {
+	return newRule(selector, coercenull)
+}
+func newIgnoreRule(selector string) (*rule, error) {
+	return newRule(selector, ignore)
+}
+
+func newRule(selector string, action ruleAction) (*rule, error) {
 	s, err := regexp.Compile(selector)
 	if err != nil {
 		return nil, err
 	}
-	return &rule{selector: s, action: coercenull}, nil
+	return &rule{selector: s, action: action}, nil
 }
 
 func (r *rule) match(selector string) bool {
@@ -97,49 +100,80 @@ type differ struct {
 
 // lineA adds line with empty B value
 func (d *differ) lineA(mainSelector, selector string, valueA jsoner) {
+	selector = joinSelectors(mainSelector, selector)
+	shouldIgnoreA, _ := d.shouldIgnore(selector)
+	if shouldIgnoreA {
+		return
+	}
 	d.lines = append(
 		d.lines,
 		&patch{
-			selector: joinSelectors(mainSelector, selector),
+			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   "",
 		})
 }
 
 func (d *differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
+	selector = joinSelectors(mainSelector, selector)
+	shouldIgnoreA, shouldIgnoreB := d.shouldIgnore(selector)
+	if shouldIgnoreA || shouldIgnoreB {
+		return
+	}
 	d.lines = append(
 		d.lines,
 		&patch{
-			selector: joinSelectors(mainSelector, selector),
+			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   valueB.JSON(),
 		})
 }
 
 func (d *differ) lineB(mainSelector, selector string, valueB jsoner) {
+	selector = joinSelectors(mainSelector, selector)
+	_, shouldIgnoreB := d.shouldIgnore(selector)
+	if shouldIgnoreB {
+		return
+	}
 	d.lines = append(
 		d.lines,
 		&patch{
-			selector: joinSelectors(mainSelector, selector),
+			selector: selector,
 			valueA:   "",
 			valueB:   valueB.JSON(),
 		})
 }
 
-func (d *differ) shouldCoerceNull(rules []*rule, selector string) bool {
-	for _, rule := range rules {
-		if rule.match(selector) && rule.action == coercenull {
-			return true
+func (d *differ) matchRule(selector string, action ruleAction) (bool, bool) {
+	matchA := false
+	matchB := false
+	for _, rule := range d.rulesA {
+		if rule.action == action && rule.match(selector) {
+			matchA = true
+			break
 		}
 	}
-	return false
+	for _, rule := range d.rulesB {
+		if rule.action == action && rule.match(selector) {
+			matchB = true
+			break
+		}
+	}
+	return matchA, matchB
+}
+
+func (d *differ) shouldCoerceNull(selector string) (bool, bool) {
+	return d.matchRule(selector, coercenull)
+}
+
+func (d *differ) shouldIgnore(selector string) (bool, bool) {
+	return d.matchRule(selector, ignore)
 }
 
 func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
-	shouldCoreceA := d.shouldCoerceNull(d.rulesA, selector)
-	shouldCoreceB := d.shouldCoerceNull(d.rulesB, selector)
+	shouldCoreceA, shouldCoreceB := d.shouldCoerceNull(selector)
 	if (shouldCoreceA && valueA.IsNil()) ||
 		(shouldCoreceB && valueB.IsNil()) {
 		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoreceA, shouldCoreceB)
