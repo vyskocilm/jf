@@ -1,4 +1,4 @@
-# Jf (Json difF)
+# jf: Json difF
 
 Compare arbitrary nested JSONS key by key. Prints an output in tabular format
 `JSONPATH jsonA jsonB`, so it can be trivially handled by unix textutils.
@@ -25,16 +25,17 @@ strings[1] "world" "worle"
 3. compare other than root map
 4. null coerce for A/B or both jsons
 5. ignore certain keys
-6. basic cmdline tool
+6. sort slice of maps by single in key
+7. basic cmdline tool
 
 ## TODO
 
 1. support for floats
 2. stringify numbers    ("42" == 42)
-3. better matchine algorithm for rules
-4. Go API
-5. rename keys
-6. flags for cmdline tool
+3. Go API
+4. rename keys
+5. flags for cmdline tool
+6. better sorting support
 
 ## Simple values
 ```

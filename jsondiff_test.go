@@ -252,3 +252,36 @@ func TestIgnore(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
+
+func TestSort(t *testing.T) {
+	const jsonA = `{
+        "data": [
+            {"id": 11, "name": "eleven"},
+            {"id": 1, "name": "one"},
+            {"id": 7, "name": "seven"}
+        ]
+    }`
+	const jsonB = `{
+        "data": [
+            {"id": 7, "name": "seven"},
+            {"id": 11, "name": "eleven"},
+            {"id": 1, "name": "one"}
+        ]
+    }`
+
+	assert := assert.New(t)
+
+	orderBy, err := newOrderbyKeyRule("data", "id")
+	assert.NoError(err)
+	ruleList := []*rule{
+		orderBy,
+	}
+
+	lines, err := diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 6)
+
+	lines, err = diff2(jsonA, jsonB, ruleList, ruleList)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}

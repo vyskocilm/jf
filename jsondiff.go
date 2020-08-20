@@ -22,7 +22,7 @@ type ruleAction int
 const (
 	coercenull ruleAction = iota
 	ignore
-    orderby
+	orderby
 )
 
 type jsoner interface {
@@ -63,7 +63,7 @@ type rule struct {
 	action      ruleAction
 	newKey      string
 	excludedKey string
-    orderObjxSlice func([]objx.Map)
+	orderByFunc func([]objx.Map)
 }
 
 func newCoerceNullRule(selector string) (*rule, error) {
@@ -75,15 +75,15 @@ func newIgnoreRule(selector string) (*rule, error) {
 
 // FIXME: can't specify the orderding rules
 func newOrderbyKeyRule(selector string, key string) (*rule, error) {
-    r, err := newRule(selector, orderby)
-    r.orderObjxSlice = func(msi []objx.Map) {
-        sort.Slice(msi, func(i, j int) bool {
-            intI := msi[i].Get(key).MustInt()
-            intJ := msi[j].Get(key).MustInt()
-            return intI < intJ
-        })
-    }
-    return r, err
+	r, err := newRule(selector, orderby)
+	r.orderByFunc = func(msi []objx.Map) {
+		sort.Slice(msi, func(i, j int) bool {
+			intI := msi[i].Get(key).MustInt()
+			intJ := msi[j].Get(key).MustInt()
+			return intI < intJ
+		})
+	}
+	return r, err
 }
 
 func newRule(selector string, action ruleAction) (*rule, error) {
@@ -186,13 +186,29 @@ func (d *differ) shouldIgnore(selector string) (bool, bool) {
 	return d.matchRule(selector, ignore)
 }
 
+func (d *differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]objx.Map)) {
+	retA := make([]func([]objx.Map), 0)
+	for _, rule := range d.rulesA {
+		if rule.action == orderby && rule.match(selector) {
+			retA = append(retA, rule.orderByFunc)
+		}
+	}
+	retB := make([]func([]objx.Map), 0)
+	for _, rule := range d.rulesB {
+		if rule.action == orderby && rule.match(selector) {
+			retB = append(retB, rule.orderByFunc)
+		}
+	}
+	return retA, retB
+}
+
 func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
-	shouldCoreceA, shouldCoreceB := d.shouldCoerceNull(selector)
-	if (shouldCoreceA && valueA.IsNil()) ||
-		(shouldCoreceB && valueB.IsNil()) {
-		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoreceA, shouldCoreceB)
+	shouldCoerceA, shouldCoerceB := d.shouldCoerceNull(selector)
+	if (shouldCoerceA && valueA.IsNil()) ||
+		(shouldCoerceB && valueB.IsNil()) {
+		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoerceA, shouldCoerceB)
 	}
 	// 2. types mismatch
 	if reflect.TypeOf(valueA.Data()) != reflect.TypeOf(valueB.Data()) {
@@ -213,6 +229,11 @@ func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 		if strA != strB {
 			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
+	case valueA.IsObjxMapSlice():
+		err := d.diffObjxMapSlice(selector, valueA.MustObjxMapSlice(), valueB.MustObjxMapSlice())
+		if err != nil {
+			return err
+		}
 	case valueA.IsInterSlice():
 		err := d.diffInterSlice(selector, valueA, valueB)
 		if err != nil {
@@ -228,6 +249,7 @@ func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 	default:
 		return fmt.Errorf("Support for type %+v is not implemented", reflect.TypeOf(valueA.Data()))
 	}
+
 	return nil
 }
 
@@ -348,6 +370,37 @@ func (d *differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	if len(iSliceB) > len(iSliceA) {
 		for idx := len(iSliceA); idx != len(iSliceB); idx++ {
 			b := iSliceB[idx]
+			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{b})
+		}
+	}
+	return nil
+}
+
+func (d *differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map) error {
+
+	orderByA, orderByB := d.orderByFuncs(mainSelector)
+	for _, oba := range orderByA {
+		oba(sliceA)
+	}
+	for _, obb := range orderByB {
+		obb(sliceB)
+	}
+
+	for idx, a := range sliceA {
+		if len(sliceB) <= idx {
+			d.lineA(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{a})
+			continue
+		}
+		b := sliceB[idx]
+		err := d.diffMap(joinSelectors(mainSelector, fmt.Sprintf("[%d]", idx)), a, b)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(sliceB) > len(sliceA) {
+		for idx := len(sliceA); idx != len(sliceB); idx++ {
+			b := sliceB[idx]
 			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{b})
 		}
 	}
