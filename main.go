@@ -66,11 +66,11 @@ func main() {
 	flag.Parse()
 	rulesA, rulesB := makeRules(ignoreB, sortAllBySelector, sortAllByKey)
 
-	if len(os.Args) != 3 {
+	if len(flag.Args()) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: jf a.json b.json\n")
 		os.Exit(exitTroubles)
 	}
-	jsA, jsB, err := js(os.Args[1], os.Args[2])
+	jsA, jsB, err := js(flag.Arg(0), flag.Arg(1))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		os.Exit(exitTroubles)
