@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -25,39 +26,6 @@ const (
 	asString
 	coercenull
 )
-
-type rule struct {
-	selector    string
-	action      ruleAction
-	newKey      string
-	excludedKey string
-}
-
-func newCoerceNullRule(selector string) *rule {
-	return &rule{selector: selector, action: coercenull}
-}
-
-func (r *rule) match(selector string) bool {
-	if r.selector != "*" {
-		panic("given selector is not implemented")
-	}
-	return true
-}
-
-// patch contains data about single difference
-type patch struct {
-	selector string
-	valueA   string
-	valueB   string
-}
-
-type patchLines []*patch
-
-type differ struct {
-	lines  patchLines
-	rulesA []*rule
-	rulesB []*rule
-}
 
 type jsoner interface {
 	JSON() string
@@ -90,6 +58,41 @@ func joinSelectors(mainSelector, selector string) string {
 		return mainSelector + selector
 	}
 	return mainSelector + "." + selector
+}
+
+type rule struct {
+	selector    *regexp.Regexp
+	action      ruleAction
+	newKey      string
+	excludedKey string
+}
+
+func newCoerceNullRule(selector string) (*rule, error) {
+	s, err := regexp.Compile(selector)
+	if err != nil {
+		return nil, err
+	}
+	return &rule{selector: s, action: coercenull}, nil
+}
+
+func (r *rule) match(selector string) bool {
+	return r.selector.MatchString(selector)
+}
+
+// patch contains data about single difference
+type patch struct {
+	selector string
+	valueA   string
+	valueB   string
+}
+
+type patchLines []*patch
+type rules []*rule
+
+type differ struct {
+	lines  patchLines
+	rulesA rules
+	rulesB rules
 }
 
 // lineA adds line with empty B value
