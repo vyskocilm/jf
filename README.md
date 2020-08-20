@@ -34,7 +34,7 @@ strings[1] "world" "worle"
 2. stringify numbers    ("42" == 42)
 3. Go API
 4. rename keys
-5. flags for cmdline tool
+5. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
 6. better sorting support
 
 ## Simple values

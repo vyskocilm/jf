@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"text/tabwriter"
 )
@@ -29,7 +31,40 @@ func js(pathA, pathB string) (string, string, error) {
 	return jsA, jsB, nil
 }
 
+func makeRules(ignoreB, sortAllBySelector, sortAllByKey *string) ([]*rule, []*rule) {
+	rulesA := make([]*rule, 0)
+	rulesB := make([]*rule, 0)
+
+	if *ignoreB != "" {
+		r, err := newIgnoreRule(*ignoreB)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rulesB = append(rulesB, r)
+	}
+
+	if *sortAllBySelector != "" && *sortAllByKey != "" {
+		r, err := newOrderbyKeyRule(*sortAllBySelector, *sortAllByKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rulesA = append(rulesA, r)
+		rulesB = append(rulesB, r)
+	}
+
+	return rulesA, rulesB
+}
+
 func main() {
+
+	// FIXME: specify meaningful cmd arguments
+	var (
+		ignoreB           = flag.String("x-ignore-b", "", "ignore keys from b.json")
+		sortAllBySelector = flag.String("x-sort-all-selector", "", "selector for slices to be sorted")
+		sortAllByKey      = flag.String("x-sort-all-key", "", "key for sorting")
+	)
+	flag.Parse()
+	rulesA, rulesB := makeRules(ignoreB, sortAllBySelector, sortAllByKey)
 
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "Usage: jf a.json b.json\n")
@@ -41,7 +76,7 @@ func main() {
 		os.Exit(exitTroubles)
 	}
 
-	lines, err := diff(jsA, jsB)
+	lines, err := diff2(jsA, jsB, rulesA, rulesB)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	for _, p := range lines {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", p.selector, p.valueA, p.valueB)
