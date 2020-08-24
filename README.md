@@ -1,7 +1,7 @@
 # jf: Json difF
 
-Compare arbitrary nested JSONS key by key. Prints an output in tabular format
-`JSONPATH jsonA jsonB`, so it can be trivially handled by unix textutils.
+JSON diff library and simple CLI in Go. It can diff two arbitrary complex JSON
+files if they starts as an json object.
 
 
 ## Installation and usage
@@ -10,7 +10,7 @@ Compare arbitrary nested JSONS key by key. Prints an output in tabular format
 git clone https://github.com/vyskocilm/jf
 cd jf
 go test
-go build
+go build github.com/vyskocilm/jf/cmd/jf
 ./jf testdata/a.json testdata/b.json 
 ints[2]    1       99
 number     42      43
@@ -30,12 +30,13 @@ strings[1] "world" "worle"
 
 ## TODO
 
-1. support for floats
+1. support for floats and bools
 2. stringify numbers    ("42" == 42)
-3. Go API
+3. Go API (WIP)
 4. rename keys
 5. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
 6. better sorting support
+7. ...
 
 ## Simple values
 ```
@@ -82,3 +83,7 @@ strings[1] "world" "worle"
 ------------------------------
 key.subkey.name "joe" "Joe"
 ```
+
+See [jsondiff_test.go](jsondiff_test.go) for more examples.
+
+

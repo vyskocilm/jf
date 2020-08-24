@@ -1,12 +1,15 @@
+// jf: quick and dirty CLI for jf (jsondiff) library
 package main
 
 import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
+	"regexp"
 	"text/tabwriter"
+
+	"github.com/vyskocilm/jf"
 )
 
 const (
@@ -31,28 +34,25 @@ func js(pathA, pathB string) (string, string, error) {
 	return jsA, jsB, nil
 }
 
-func makeRules(ignoreB, sortAllBySelector, sortAllByKey *string) ([]*rule, []*rule) {
-	rulesA := make([]*rule, 0)
-	rulesB := make([]*rule, 0)
+func makeRules(d *jf.Differ, ignoreB, sortAllBySelector, sortAllByKey *string) error {
 
 	if *ignoreB != "" {
-		r, err := newIgnoreRule(*ignoreB)
+		rg, err := regexp.Compile(*ignoreB)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
-		rulesB = append(rulesB, r)
+		d.AddIgnore(jf.RuleB, rg)
 	}
 
 	if *sortAllBySelector != "" && *sortAllByKey != "" {
-		r, err := newOrderbyKeyRule(*sortAllBySelector, *sortAllByKey)
+		rg, err := regexp.Compile(*sortAllBySelector)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
-		rulesA = append(rulesA, r)
-		rulesB = append(rulesB, r)
+		d.AddOrderByKey(jf.RuleAB, rg, *sortAllByKey)
 	}
 
-	return rulesA, rulesB
+	return nil
 }
 
 func main() {
@@ -64,7 +64,13 @@ func main() {
 		sortAllByKey      = flag.String("x-sort-all-key", "", "key for sorting")
 	)
 	flag.Parse()
-	rulesA, rulesB := makeRules(ignoreB, sortAllBySelector, sortAllByKey)
+
+	d := jf.NewDiffer()
+	err := makeRules(d, ignoreB, sortAllBySelector, sortAllByKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing commandline flags: %s", err)
+		os.Exit(exitTroubles)
+	}
 
 	if len(flag.Args()) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: jf a.json b.json\n")
@@ -76,13 +82,13 @@ func main() {
 		os.Exit(exitTroubles)
 	}
 
-	lines, err := diff2(jsA, jsB, rulesA, rulesB)
+	diff, err := d.Diff(jsA, jsB)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	for _, p := range lines {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", p.selector, p.valueA, p.valueB)
+	for _, p := range diff {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", p.Selector(), p.A(), p.B())
 	}
 
-	if len(lines) == 0 {
+	if len(diff) == 0 {
 		os.Exit(exitNoDiff)
 	}
 	w.Flush()

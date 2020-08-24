@@ -1,6 +1,7 @@
-package main
+package jf
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,14 +25,14 @@ func TestSimpleMap(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 4)
 
-	assert.Equal(&patch{"ints[2]", "1", "99"}, lines[0])
-	assert.Equal(&patch{"number", "42", "43"}, lines[1])
-	assert.Equal(&patch{"string", `"hello"`, `"hellp"`}, lines[2])
-	assert.Equal(&patch{"strings[1]", `"world"`, `"worle"`}, lines[3])
+	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[0])
+	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[1])
+	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[2])
+	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[3])
 }
 
 // TestDifferentKeys tests the case that in MSI there are different keys
@@ -45,12 +46,12 @@ func TestDifferentKeys(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 2)
 
-	assert.Equal(&patch{"numberA", "42", ""}, lines[0])
-	assert.Equal(&patch{"numberB", "", "42"}, lines[1])
+	assert.Equal(&SingleDiff{"numberA", "42", ""}, lines[0])
+	assert.Equal(&SingleDiff{"numberB", "", "42"}, lines[1])
 }
 
 // TestDifferentArrays sizes
@@ -68,15 +69,15 @@ func TestDifferentArrays(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 5)
 
-	assert.Equal(&patch{"bigger[1]", "", "20"}, lines[0])
-	assert.Equal(&patch{"bigger[2]", "", "30"}, lines[1])
-	assert.Equal(&patch{"smaller[1]", "2", ""}, lines[2])
-	assert.Equal(&patch{"weird[0]", "10", "30"}, lines[3])
-	assert.Equal(&patch{"weird[1]", "20", "40"}, lines[4])
+	assert.Equal(&SingleDiff{"bigger[1]", "", "20"}, lines[0])
+	assert.Equal(&SingleDiff{"bigger[2]", "", "30"}, lines[1])
+	assert.Equal(&SingleDiff{"smaller[1]", "2", ""}, lines[2])
+	assert.Equal(&SingleDiff{"weird[0]", "10", "30"}, lines[3])
+	assert.Equal(&SingleDiff{"weird[1]", "20", "40"}, lines[4])
 }
 
 func TestMapInMap(t *testing.T) {
@@ -94,10 +95,10 @@ func TestMapInMap(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"key.name", `"joe"`, `"Joe"`}, lines[0])
+	assert.Equal(&SingleDiff{"key.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapInMapInMap(t *testing.T) {
@@ -119,10 +120,10 @@ func TestMapInMapInMap(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"key.subkey.name", `"joe"`, `"Joe"`}, lines[0])
+	assert.Equal(&SingleDiff{"key.subkey.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapSlice(t *testing.T) {
@@ -142,11 +143,11 @@ func TestMapSlice(t *testing.T) {
     `
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 2)
-	assert.Equal(&patch{"data[0].name", `"one"`, `"One"`}, lines[0])
-	assert.Equal(&patch{"data[1].name", `"two"`, `"Two"`}, lines[1])
+	assert.Equal(&SingleDiff{"data[0].name", `"one"`, `"One"`}, lines[0])
+	assert.Equal(&SingleDiff{"data[1].name", `"two"`, `"Two"`}, lines[1])
 }
 
 func TestNil(t *testing.T) {
@@ -158,10 +159,10 @@ func TestNil(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	lines, err := diff(jsonA, jsonB)
+	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"key", "null", "42"}, lines[0])
+	assert.Equal(&SingleDiff{"key", "null", "42"}, lines[0])
 }
 
 // TestCoerceNull tests null coercion of jsonA only, jsonB only and both
@@ -174,26 +175,21 @@ func TestCoerceNull(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-
-	coerceAll, err := newCoerceNullRule(".*")
+	dotStar, err := regexp.Compile(".*")
 	assert.NoError(err)
-
-	ruleList := []*rule{
-		coerceAll,
-	}
 
 	// 1. no coercion, return one line: see TestNil
 	// 2. coercion of A, return 0 lines
-	lines, err := diff2(jsonA, jsonB, ruleList, nil)
+	lines, err := NewDiffer().AddCoerceNull(RuleA, dotStar).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 	// 3. coercion of B, return 1 line
-	lines, err = diff2(jsonA, jsonB, nil, ruleList)
+	lines, err = NewDiffer().AddCoerceNull(RuleB, dotStar).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"key", "null", "0"}, lines[0])
+	assert.Equal(&SingleDiff{"key", "null", "0"}, lines[0])
 	// 3. coercion of A/B, return 0 lines
-	lines, err = diff2(jsonA, jsonB, ruleList, ruleList)
+	lines, err = NewDiffer().AddCoerceNull(RuleAB, dotStar).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -214,16 +210,13 @@ func TestCoerceNullMatch(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-	coerceSubkey1, err := newCoerceNullRule("key\\.subkey1")
+    keyDotSubkey1, err := regexp.Compile("key\\.subkey1")
 	assert.NoError(err)
 
-	ruleList := []*rule{
-		coerceSubkey1,
-	}
-	lines, err := diff2(jsonA, jsonB, ruleList, nil)
+	lines, err := NewDiffer().AddCoerceNull(RuleA, keyDotSubkey1).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"key.subkey2", "null", "0"}, lines[0])
+	assert.Equal(&SingleDiff{"key.subkey2", "null", "0"}, lines[0])
 }
 
 func TestIgnore(t *testing.T) {
@@ -236,19 +229,15 @@ func TestIgnore(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-	ignoreAdditional, err := newIgnoreRule("additional")
+    additional, err := regexp.Compile("additional")
 	assert.NoError(err)
 
-	ruleList := []*rule{
-		ignoreAdditional,
-	}
-
-	lines, err := diff2(jsonA, jsonB, ruleList, nil)
+    lines, err := NewDiffer().AddIgnore(RuleA, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&patch{"additional", "", "42"}, lines[0])
+	assert.Equal(&SingleDiff{"additional", "", "42"}, lines[0])
 
-	lines, err = diff2(jsonA, jsonB, nil, ruleList)
+    lines, err = NewDiffer().AddIgnore(RuleB, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -270,18 +259,14 @@ func TestSort(t *testing.T) {
     }`
 
 	assert := assert.New(t)
+    data, err := regexp.Compile("data")
+    assert.NoError(err)
 
-	orderBy, err := newOrderbyKeyRule("data", "id")
-	assert.NoError(err)
-	ruleList := []*rule{
-		orderBy,
-	}
-
-	lines, err := diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddOrderByKey(RuleA, data, "id").Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 6)
 
-	lines, err = diff2(jsonA, jsonB, ruleList, ruleList)
+	lines, err = NewDiffer().AddOrderByKey(RuleAB, data, "id").Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }

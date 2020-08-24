@@ -1,5 +1,5 @@
-// jsondiff: diff for JSON
-package main
+// jf: diff for JSON
+package jf
 
 import (
 	"encoding/json"
@@ -66,16 +66,40 @@ type rule struct {
 	orderByFunc func([]objx.Map)
 }
 
-func newCoerceNullRule(selector string) (*rule, error) {
-	return newRule(selector, coercenull)
+type ruleDest int
+const (
+    RuleA ruleDest = iota
+    RuleB
+    RuleAB
+)
+
+// AddCoerceNull enables coercion of null value to empty value for given type
+// "key": null will be equivalent of {}, [], "", 0 and false
+func (d *Differ) AddCoerceNull(dest ruleDest, selector *regexp.Regexp) *Differ {
+    return d.addRule(dest, &rule{selector: selector, action: coercenull})
 }
-func newIgnoreRule(selector string) (*rule, error) {
-	return newRule(selector, ignore)
+
+func (d *Differ) addRule(dest ruleDest, rule *rule) *Differ {
+    switch dest {
+        case RuleA:
+            d.rulesA = append(d.rulesA, rule)
+        case RuleB:
+            d.rulesB = append(d.rulesB, rule)
+        case RuleAB:
+            d.rulesA = append(d.rulesA, rule)
+            d.rulesB = append(d.rulesB, rule)
+    }
+    return d
+}
+
+// AddIgnore adds selectors, which will be ignored in resulting diff
+func (d *Differ) AddIgnore(dest ruleDest, selector *regexp.Regexp) *Differ {
+    return d.addRule(dest, &rule{selector: selector, action: ignore})
 }
 
 // FIXME: can't specify the orderding rules
-func newOrderbyKeyRule(selector string, key string) (*rule, error) {
-	r, err := newRule(selector, orderby)
+func newOrderbyKeyRule(selector *regexp.Regexp, key string) *rule {
+    r := &rule{selector: selector, action: orderby}
 	r.orderByFunc = func(msi []objx.Map) {
 		sort.Slice(msi, func(i, j int) bool {
 			intI := msi[i].Get(key).MustInt()
@@ -83,84 +107,99 @@ func newOrderbyKeyRule(selector string, key string) (*rule, error) {
 			return intI < intJ
 		})
 	}
-	return r, err
+    return r
 }
 
-func newRule(selector string, action ruleAction) (*rule, error) {
-	s, err := regexp.Compile(selector)
-	if err != nil {
-		return nil, err
-	}
-	return &rule{selector: s, action: action}, nil
+func (d *Differ) AddOrderByKey(dest ruleDest, selector *regexp.Regexp, key string) *Differ {
+    return d.addRule(dest, newOrderbyKeyRule(selector, key))
 }
 
 func (r *rule) match(selector string) bool {
 	return r.selector.MatchString(selector)
 }
 
-// patch contains data about single difference
-type patch struct {
+// SingleDiff express the difference of one JSON selector
+type SingleDiff struct {
 	selector string
 	valueA   string
 	valueB   string
 }
 
-type patchLines []*patch
+func (d *SingleDiff) Selector() string {
+    return d.selector
+}
+
+func (d *SingleDiff) A() string {
+    return d.valueA
+}
+
+func (d *SingleDiff) B() string {
+    return d.valueB
+}
+
+type DiffList []*SingleDiff
 type rules []*rule
 
-type differ struct {
-	lines  patchLines
+type Differ struct {
+	diff  DiffList
 	rulesA rules
 	rulesB rules
 }
 
+func NewDiffer() *Differ {
+    return &Differ{
+		diff:  make(DiffList, 0, 64),
+        rulesA: nil,
+        rulesB: nil}
+}
+
 // lineA adds line with empty B value
-func (d *differ) lineA(mainSelector, selector string, valueA jsoner) {
+func (d *Differ) lineA(mainSelector, selector string, valueA jsoner) {
 	selector = joinSelectors(mainSelector, selector)
 	shouldIgnoreA, _ := d.shouldIgnore(selector)
 	if shouldIgnoreA {
 		return
 	}
-	d.lines = append(
-		d.lines,
-		&patch{
+	d.diff = append(
+		d.diff,
+		&SingleDiff{
 			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   "",
 		})
 }
 
-func (d *differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
+func (d *Differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
 	selector = joinSelectors(mainSelector, selector)
 	shouldIgnoreA, shouldIgnoreB := d.shouldIgnore(selector)
 	if shouldIgnoreA || shouldIgnoreB {
 		return
 	}
-	d.lines = append(
-		d.lines,
-		&patch{
+	d.diff = append(
+		d.diff,
+		&SingleDiff{
 			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   valueB.JSON(),
 		})
 }
 
-func (d *differ) lineB(mainSelector, selector string, valueB jsoner) {
+func (d *Differ) lineB(mainSelector, selector string, valueB jsoner) {
 	selector = joinSelectors(mainSelector, selector)
 	_, shouldIgnoreB := d.shouldIgnore(selector)
 	if shouldIgnoreB {
 		return
 	}
-	d.lines = append(
-		d.lines,
-		&patch{
+	d.diff = append(
+		d.diff,
+		&SingleDiff{
 			selector: selector,
 			valueA:   "",
 			valueB:   valueB.JSON(),
 		})
 }
 
-func (d *differ) matchRule(selector string, action ruleAction) (bool, bool) {
+func (d *Differ) matchRule(selector string, action ruleAction) (bool, bool) {
 	matchA := false
 	matchB := false
 	for _, rule := range d.rulesA {
@@ -178,15 +217,15 @@ func (d *differ) matchRule(selector string, action ruleAction) (bool, bool) {
 	return matchA, matchB
 }
 
-func (d *differ) shouldCoerceNull(selector string) (bool, bool) {
+func (d *Differ) shouldCoerceNull(selector string) (bool, bool) {
 	return d.matchRule(selector, coercenull)
 }
 
-func (d *differ) shouldIgnore(selector string) (bool, bool) {
+func (d *Differ) shouldIgnore(selector string) (bool, bool) {
 	return d.matchRule(selector, ignore)
 }
 
-func (d *differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]objx.Map)) {
+func (d *Differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]objx.Map)) {
 	retA := make([]func([]objx.Map), 0)
 	for _, rule := range d.rulesA {
 		if rule.action == orderby && rule.match(selector) {
@@ -202,7 +241,7 @@ func (d *differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]obj
 	return retA, retB
 }
 
-func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
+func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
 	shouldCoerceA, shouldCoerceB := d.shouldCoerceNull(selector)
@@ -255,7 +294,7 @@ func (d *differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 // diffValuesCoerced allows an optional coercion of nulls
 // TODO: join together with diffValues
-func (d *differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, coerceA, coerceB bool) error {
+func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, coerceA, coerceB bool) error {
 
 	orNil := func(isType func(v *objx.Value) bool, valueA, valueB *objx.Value) bool {
 		return (isType(valueA) || (coerceA && valueA.IsNil())) ||
@@ -349,7 +388,7 @@ func newValue(i interface{}) *objx.Value {
 	return objx.New(m).Get("foo")
 }
 
-func (d *differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB *objx.Value) error {
+func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB *objx.Value) error {
 	if !valueA.IsInterSlice() || !valueA.IsInterSlice() {
 		return fmt.Errorf("type mismatch for %s, valueA or valueB is not []interface{}, this is programming error", mainSelector)
 	}
@@ -376,7 +415,7 @@ func (d *differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	return nil
 }
 
-func (d *differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map) error {
+func (d *Differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map) error {
 
 	orderByA, orderByB := d.orderByFuncs(mainSelector)
 	for _, oba := range orderByA {
@@ -418,7 +457,7 @@ func sortedKeys(m map[string]interface{}) []string {
 	return keys
 }
 
-func (d *differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) error {
+func (d *Differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) error {
 
 	visitedKeysA := make(map[string]struct{})
 	for _, keyA := range sortedKeys(objA) {
@@ -447,55 +486,32 @@ func (d *differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 	return nil
 }
 
-func diff(jsA, jsB string) ([]*patch, error) {
+// Diff returns a list of individual list by comparing the jsonA and jsonB inputs
+// supports arbitrary JSON files, if the top level is map of strings
+func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 
-	objA, err := objx.FromJSON(jsA)
+	objA, err := objx.FromJSON(jsonA)
 	if err != nil {
-		return []*patch{}, err
+		return []*SingleDiff{}, err
 	}
-	objB, err := objx.FromJSON(jsB)
+	objB, err := objx.FromJSON(jsonB)
 	if err != nil {
-		return []*patch{}, err
+		return []*SingleDiff{}, err
 	}
 
-	d := differ{
-		lines:  make([]*patch, 0, 64),
-		rulesA: make([]*rule, 0),
-		rulesB: make([]*rule, 0),
+	d2 := Differ{
+		diff:  make(DiffList, 0, 64),
+		rulesA: d.rulesA,
+		rulesB: d.rulesB,
 	}
-	err = d.diffMap("", objA, objB)
+	err = d2.diffMap("", objA, objB)
 	if err != nil {
-		return d.lines, err
+		return d2.diff, err
 	}
-	return d.lines, nil
+	return d2.diff, nil
+
 }
 
-func diff2(jsA, jsB string, rulesA, rulesB []*rule) ([]*patch, error) {
-
-	objA, err := objx.FromJSON(jsA)
-	if err != nil {
-		return []*patch{}, err
-	}
-	objB, err := objx.FromJSON(jsB)
-	if err != nil {
-		return []*patch{}, err
-	}
-
-	if rulesA == nil {
-		rulesA = make([]*rule, 0)
-	}
-	if rulesB == nil {
-		rulesB = make([]*rule, 0)
-	}
-
-	d := differ{
-		lines:  make([]*patch, 0, 64),
-		rulesA: rulesA,
-		rulesB: rulesB,
-	}
-	err = d.diffMap("", objA, objB)
-	if err != nil {
-		return d.lines, err
-	}
-	return d.lines, nil
+func Diff(jsonA, jsonB string) (DiffList, error) {
+    return NewDiffer().Diff(jsonA, jsonB)
 }
