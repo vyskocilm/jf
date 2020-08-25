@@ -15,7 +15,8 @@ func TestSimpleMap(t *testing.T) {
         "string": "hello",
         "strings": ["hello", "world"],
         "ints": [4, 2, 1],
-        "bool": true
+        "bool": true,
+        "float": 11.1
     }`
 
 	const jsonB = `{
@@ -23,19 +24,21 @@ func TestSimpleMap(t *testing.T) {
         "string": "hellp",
         "strings": ["hello", "worle"],
         "ints": [4, 2, 99],
-        "bool": false
+        "bool": false,
+        "float": 11.11
     }`
 
 	assert := assert.New(t)
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
-	assert.Len(lines, 5)
+	assert.Len(lines, 6)
 
 	assert.Equal(&SingleDiff{"bool", "true", "false"}, lines[0])
-	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[1])
-	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[2])
-	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[3])
-	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[4])
+	assert.Equal(&SingleDiff{"float", "11.1", "11.11"}, lines[1])
+	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[2])
+	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[3])
+	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[4])
+	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[5])
 }
 
 // TestDifferentKeys tests the case that in MSI there are different keys

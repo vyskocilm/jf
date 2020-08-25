@@ -4,6 +4,7 @@ package jf
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"sort"
@@ -36,6 +37,10 @@ type jsonI struct {
 	i interface{}
 }
 
+func floatEqual(a, b float64) bool {
+	return math.Abs(a-b) <= 1e-9
+}
+
 func (i jsonI) JSON() string {
 	var inter interface{}
 	switch v := i.i.(type) {
@@ -57,6 +62,8 @@ func (i jsonI) isZero() bool {
 		switch {
 		case v.IsInt():
 			return v.MustInt() == 0
+		case v.IsFloat64():
+			return floatEqual(v.MustFloat64(), 0.0)
 		case v.IsStr():
 			return v.MustStr() == ""
 		case v.IsBool():
@@ -71,6 +78,8 @@ func (i jsonI) isZero() bool {
 		}
 	case int:
 		return v == 0
+	case float64:
+		return floatEqual(v, 0.0)
 	case string:
 		return v == ""
 	case bool:
@@ -326,6 +335,12 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 		if intA != intB {
 			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
+	case valueA.IsFloat64():
+		floatA := valueA.MustFloat64()
+		floatB := valueB.MustFloat64()
+		if !floatEqual(floatA, floatB) {
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		}
 	case valueA.IsStr():
 		strA := valueA.MustStr()
 		strB := valueB.MustStr()
@@ -372,6 +387,10 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 		isTyp := func(v *objx.Value) bool { return v.IsInt() }
 		return orNil(isTyp, valueA, valueB)
 	}
+	isFloat64 := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsFloat64() }
+		return orNil(isTyp, valueA, valueB)
+	}
 	isStr := func(valueA, valueB *objx.Value) bool {
 		isTyp := func(v *objx.Value) bool { return v.IsStr() }
 		return orNil(isTyp, valueA, valueB)
@@ -399,6 +418,21 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 			intB = valueB.MustInt()
 		}
 		if intA != intB {
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		}
+	case isFloat64(valueA, valueB):
+		var floatA, floatB float64
+		if coerceA {
+			floatA = valueA.Float64(0.0)
+		} else {
+			floatA = valueA.MustFloat64()
+		}
+		if coerceB {
+			floatB = valueA.Float64(0.0)
+		} else {
+			floatB = valueA.MustFloat64()
+		}
+		if !floatEqual(floatA, floatB) {
 			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case isStr(valueA, valueB):

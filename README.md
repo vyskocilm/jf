@@ -23,7 +23,7 @@ strings[1] "world" "worle"
 
 ## Features
 
-1. compare primitive values, ints, bools and strings
+1. compare primitive values, ints, floats, bools and strings
 2. compare arrays
 3. compare other than root map
 4. null coerce for A/B or both jsons
@@ -33,13 +33,12 @@ strings[1] "world" "worle"
 
 ## TODO
 
-1. support for floats and bools
-2. stringify numbers    ("42" == 42)
-3. Go API (WIP)
-4. rename keys
-5. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
-6. better sorting support
-7. ...
+1. stringify numbers    ("42" == 42)
+2. Go API (WIP)
+3. rename keys
+4. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
+5. better sorting support
+6. ...
 
 ## Simple values
 ```
