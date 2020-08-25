@@ -67,39 +67,40 @@ type rule struct {
 }
 
 type ruleDest int
+
 const (
-    RuleA ruleDest = iota
-    RuleB
-    RuleAB
+	RuleA ruleDest = iota
+	RuleB
+	RuleAB
 )
 
 // AddCoerceNull enables coercion of null value to empty value for given type
 // "key": null will be equivalent of {}, [], "", 0 and false
 func (d *Differ) AddCoerceNull(dest ruleDest, selector *regexp.Regexp) *Differ {
-    return d.addRule(dest, &rule{selector: selector, action: coercenull})
+	return d.addRule(dest, &rule{selector: selector, action: coercenull})
 }
 
 func (d *Differ) addRule(dest ruleDest, rule *rule) *Differ {
-    switch dest {
-        case RuleA:
-            d.rulesA = append(d.rulesA, rule)
-        case RuleB:
-            d.rulesB = append(d.rulesB, rule)
-        case RuleAB:
-            d.rulesA = append(d.rulesA, rule)
-            d.rulesB = append(d.rulesB, rule)
-    }
-    return d
+	switch dest {
+	case RuleA:
+		d.rulesA = append(d.rulesA, rule)
+	case RuleB:
+		d.rulesB = append(d.rulesB, rule)
+	case RuleAB:
+		d.rulesA = append(d.rulesA, rule)
+		d.rulesB = append(d.rulesB, rule)
+	}
+	return d
 }
 
 // AddIgnore adds selectors, which will be ignored in resulting diff
 func (d *Differ) AddIgnore(dest ruleDest, selector *regexp.Regexp) *Differ {
-    return d.addRule(dest, &rule{selector: selector, action: ignore})
+	return d.addRule(dest, &rule{selector: selector, action: ignore})
 }
 
 // FIXME: can't specify the orderding rules
 func newOrderbyKeyRule(selector *regexp.Regexp, key string) *rule {
-    r := &rule{selector: selector, action: orderby}
+	r := &rule{selector: selector, action: orderby}
 	r.orderByFunc = func(msi []objx.Map) {
 		sort.Slice(msi, func(i, j int) bool {
 			intI := msi[i].Get(key).MustInt()
@@ -107,11 +108,11 @@ func newOrderbyKeyRule(selector *regexp.Regexp, key string) *rule {
 			return intI < intJ
 		})
 	}
-    return r
+	return r
 }
 
 func (d *Differ) AddOrderByKey(dest ruleDest, selector *regexp.Regexp, key string) *Differ {
-    return d.addRule(dest, newOrderbyKeyRule(selector, key))
+	return d.addRule(dest, newOrderbyKeyRule(selector, key))
 }
 
 func (r *rule) match(selector string) bool {
@@ -126,31 +127,31 @@ type SingleDiff struct {
 }
 
 func (d *SingleDiff) Selector() string {
-    return d.selector
+	return d.selector
 }
 
 func (d *SingleDiff) A() string {
-    return d.valueA
+	return d.valueA
 }
 
 func (d *SingleDiff) B() string {
-    return d.valueB
+	return d.valueB
 }
 
 type DiffList []*SingleDiff
 type rules []*rule
 
 type Differ struct {
-	diff  DiffList
+	diff   DiffList
 	rulesA rules
 	rulesB rules
 }
 
 func NewDiffer() *Differ {
-    return &Differ{
-		diff:  make(DiffList, 0, 64),
-        rulesA: nil,
-        rulesB: nil}
+	return &Differ{
+		diff:   make(DiffList, 0, 64),
+		rulesA: nil,
+		rulesB: nil}
 }
 
 // lineA adds line with empty B value
@@ -256,6 +257,12 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 	}
 
 	switch {
+	case valueA.IsBool() && valueB.IsBool():
+		intA := valueA.MustBool()
+		intB := valueB.MustBool()
+		if intA != intB {
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		}
 	case valueA.IsInt():
 		intA := valueA.MustInt()
 		intB := valueB.MustInt()
@@ -299,6 +306,10 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 	orNil := func(isType func(v *objx.Value) bool, valueA, valueB *objx.Value) bool {
 		return (isType(valueA) || (coerceA && valueA.IsNil())) ||
 			(isType(valueB) || (coerceB && valueB.IsNil()))
+	}
+	isBool := func(valueA, valueB *objx.Value) bool {
+		isTyp := func(v *objx.Value) bool { return v.IsBool() }
+		return orNil(isTyp, valueA, valueB)
 	}
 	isInt := func(valueA, valueB *objx.Value) bool {
 		isTyp := func(v *objx.Value) bool { return v.IsInt() }
@@ -346,6 +357,23 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 			strB = valueB.MustStr()
 		}
 		if strA != strB {
+			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		}
+	case isBool(valueA, valueB):
+		//XXX: isBool check must be after isInt (and probably isStr) otherwise
+		//  A={"key": null}, B={"key": 0} with null corecion will fail
+		var intA, intB bool
+		if coerceA {
+			intA = valueA.Bool(false)
+		} else {
+			intA = valueA.MustBool()
+		}
+		if coerceB {
+			intB = valueB.Bool(false)
+		} else {
+			intB = valueB.MustBool()
+		}
+		if intA != intB {
 			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
 		}
 	case isInterSlice(valueA, valueB):
@@ -500,7 +528,7 @@ func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 	}
 
 	d2 := Differ{
-		diff:  make(DiffList, 0, 64),
+		diff:   make(DiffList, 0, 64),
 		rulesA: d.rulesA,
 		rulesB: d.rulesB,
 	}
@@ -513,5 +541,5 @@ func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 }
 
 func Diff(jsonA, jsonB string) (DiffList, error) {
-    return NewDiffer().Diff(jsonA, jsonB)
+	return NewDiffer().Diff(jsonA, jsonB)
 }

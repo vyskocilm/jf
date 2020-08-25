@@ -2,5 +2,6 @@
  "number": 43,
  "string": "hellp",
  "strings": ["hello", "worle"],
- "ints": [4, 2, 99]
+ "ints": [4, 2, 99],
+ "bool": false
 }

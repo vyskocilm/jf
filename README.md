@@ -11,7 +11,8 @@ git clone https://github.com/vyskocilm/jf
 cd jf
 go test
 go build github.com/vyskocilm/jf/cmd/jf
-./jf testdata/a.json testdata/b.json 
+./jf testdata/a.json testdata/b.json
+bool       true    false
 ints[2]    1       99
 number     42      43
 string     "hello" "hellp"
@@ -20,7 +21,7 @@ strings[1] "world" "worle"
 
 ## Features
 
-1. compare primitive values, ints and strings
+1. compare primitive values, ints, bools and strings
 2. compare arrays
 3. compare other than root map
 4. null coerce for A/B or both jsons

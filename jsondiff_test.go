@@ -14,25 +14,28 @@ func TestSimpleMap(t *testing.T) {
         "number": 42,
         "string": "hello",
         "strings": ["hello", "world"],
-        "ints": [4, 2, 1]
+        "ints": [4, 2, 1],
+        "bool": true
     }`
 
 	const jsonB = `{
         "number": 43,
         "string": "hellp",
         "strings": ["hello", "worle"],
-        "ints": [4, 2, 99]
+        "ints": [4, 2, 99],
+        "bool": false
     }`
 
 	assert := assert.New(t)
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
-	assert.Len(lines, 4)
+	assert.Len(lines, 5)
 
-	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[0])
-	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[1])
-	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[2])
-	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[3])
+	assert.Equal(&SingleDiff{"bool", "true", "false"}, lines[0])
+	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[1])
+	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[2])
+	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[3])
+	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[4])
 }
 
 // TestDifferentKeys tests the case that in MSI there are different keys
@@ -210,7 +213,7 @@ func TestCoerceNullMatch(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-    keyDotSubkey1, err := regexp.Compile("key\\.subkey1")
+	keyDotSubkey1, err := regexp.Compile("key\\.subkey1")
 	assert.NoError(err)
 
 	lines, err := NewDiffer().AddCoerceNull(RuleA, keyDotSubkey1).Diff(jsonA, jsonB)
@@ -229,15 +232,15 @@ func TestIgnore(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-    additional, err := regexp.Compile("additional")
+	additional, err := regexp.Compile("additional")
 	assert.NoError(err)
 
-    lines, err := NewDiffer().AddIgnore(RuleA, additional).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddIgnore(RuleA, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
 	assert.Equal(&SingleDiff{"additional", "", "42"}, lines[0])
 
-    lines, err = NewDiffer().AddIgnore(RuleB, additional).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddIgnore(RuleB, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -259,8 +262,8 @@ func TestSort(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-    data, err := regexp.Compile("data")
-    assert.NoError(err)
+	data, err := regexp.Compile("data")
+	assert.NoError(err)
 
 	lines, err := NewDiffer().AddOrderByKey(RuleA, data, "id").Diff(jsonA, jsonB)
 	assert.NoError(err)
