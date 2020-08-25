@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/vyskocilm/jf.svg?style=svg)](https://circleci.com/gh/vyskocilm/jf) [![license](https://img.shields.io/badge/license-bsd--3--clause-green)](https://raw.githubusercontent.com/vyskocilm/jf/master/LICENSE)
+
 # jf: Json difF
 
 JSON diff library and simple CLI in Go. It can diff two arbitrary complex JSON
