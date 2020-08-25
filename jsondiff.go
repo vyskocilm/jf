@@ -15,6 +15,7 @@ import (
 /*
    coercenull: make null == false, "", {} or [], 0
    ignore: ignore matching keys
+   ignoreIfZero: ignores matching keys if value is zero (false, "", 0, [] or {})
    orderby: sort slice of maps
 */
 type ruleAction int
@@ -22,11 +23,13 @@ type ruleAction int
 const (
 	coercenull ruleAction = iota
 	ignore
+	ignoreIfZero
 	orderby
 )
 
 type jsoner interface {
 	JSON() string
+	isZero() bool
 }
 
 type jsonI struct {
@@ -46,6 +49,39 @@ func (i jsonI) JSON() string {
 		return fmt.Sprintf("%%!marshallError(%s)", err.Error())
 	}
 	return string(b)
+}
+
+func (i jsonI) isZero() bool {
+	switch v := i.i.(type) {
+	case *objx.Value:
+		switch {
+		case v.IsInt():
+			return v.MustInt() == 0
+		case v.IsStr():
+			return v.MustStr() == ""
+		case v.IsBool():
+			return v.MustBool() == false
+		case v.IsInterSlice():
+			return len(v.MustInterSlice()) == 0
+		case v.IsObjxMap():
+			return len(v.MustObjxMap()) == 0
+		default:
+			errmsg := fmt.Errorf("isZero does not support %s", i.String())
+			panic(errmsg)
+		}
+	case int:
+		return v == 0
+	case string:
+		return v == ""
+	case bool:
+		return v == false
+	}
+	errmsg := fmt.Errorf("isZero does not support %s", i.String())
+	panic(errmsg)
+}
+
+func (i jsonI) String() string {
+	return fmt.Sprintf("%T %+v", i.i, i.i)
 }
 
 func joinSelectors(mainSelector, selector string) string {
@@ -96,6 +132,11 @@ func (d *Differ) addRule(dest ruleDest, rule *rule) *Differ {
 // AddIgnore adds selectors, which will be ignored in resulting diff
 func (d *Differ) AddIgnore(dest ruleDest, selector *regexp.Regexp) *Differ {
 	return d.addRule(dest, &rule{selector: selector, action: ignore})
+}
+
+// AddIgnoreIfEmpty adds selectors, which will be ignored in a case value is empty
+func (d *Differ) AddIgnoreIfZero(dest ruleDest, selector *regexp.Regexp) *Differ {
+	return d.addRule(dest, &rule{selector: selector, action: ignoreIfZero})
 }
 
 // FIXME: can't specify the orderding rules
@@ -161,6 +202,10 @@ func (d *Differ) lineA(mainSelector, selector string, valueA jsoner) {
 	if shouldIgnoreA {
 		return
 	}
+	shouldIgnoreIfZeroA, _ := d.shouldIgnoreIfZero(selector)
+	if shouldIgnoreIfZeroA && valueA.isZero() {
+		return
+	}
 	d.diff = append(
 		d.diff,
 		&SingleDiff{
@@ -176,6 +221,10 @@ func (d *Differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
 	if shouldIgnoreA || shouldIgnoreB {
 		return
 	}
+	shouldIgnoreIfZeroA, shouldIgnoreIfZeroB := d.shouldIgnoreIfZero(selector)
+	if (shouldIgnoreIfZeroA && valueA.isZero()) || (shouldIgnoreIfZeroB && valueB.isZero()) {
+		return
+	}
 	d.diff = append(
 		d.diff,
 		&SingleDiff{
@@ -189,6 +238,10 @@ func (d *Differ) lineB(mainSelector, selector string, valueB jsoner) {
 	selector = joinSelectors(mainSelector, selector)
 	_, shouldIgnoreB := d.shouldIgnore(selector)
 	if shouldIgnoreB {
+		return
+	}
+	_, shouldIgnoreIfZeroB := d.shouldIgnoreIfZero(selector)
+	if shouldIgnoreIfZeroB && valueB.isZero() {
 		return
 	}
 	d.diff = append(
@@ -224,6 +277,10 @@ func (d *Differ) shouldCoerceNull(selector string) (bool, bool) {
 
 func (d *Differ) shouldIgnore(selector string) (bool, bool) {
 	return d.matchRule(selector, ignore)
+}
+
+func (d *Differ) shouldIgnoreIfZero(selector string) (bool, bool) {
+	return d.matchRule(selector, ignoreIfZero)
 }
 
 func (d *Differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]objx.Map)) {

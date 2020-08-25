@@ -273,3 +273,30 @@ func TestSort(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
+
+func TestIgnoreZero(t *testing.T) {
+
+	const jsonA = `{
+        "number": 0,
+        "string": "",
+        "strings": [],
+        "objects": {},
+        "bool": false
+    }`
+
+	const jsonB = `{
+    }`
+
+    re := func(s string) *regexp.Regexp {return regexp.MustCompile(s)}
+
+	assert := assert.New(t)
+	lines, err := NewDiffer().
+        AddIgnoreIfZero(RuleA, re("number")).
+        AddIgnoreIfZero(RuleA, re("string")).
+        AddIgnoreIfZero(RuleA, re("strings")).
+        AddIgnoreIfZero(RuleA, re("objects")).
+        AddIgnoreIfZero(RuleA, re("bool")).
+        Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
