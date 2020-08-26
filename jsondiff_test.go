@@ -1,6 +1,7 @@
 package jf
 
 import (
+	"math"
 	"regexp"
 	"testing"
 
@@ -290,16 +291,47 @@ func TestIgnoreZero(t *testing.T) {
 	const jsonB = `{
     }`
 
-    re := func(s string) *regexp.Regexp {return regexp.MustCompile(s)}
+	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
 
 	assert := assert.New(t)
 	lines, err := NewDiffer().
-        AddIgnoreIfZero(RuleA, re("number")).
-        AddIgnoreIfZero(RuleA, re("string")).
-        AddIgnoreIfZero(RuleA, re("strings")).
-        AddIgnoreIfZero(RuleA, re("objects")).
-        AddIgnoreIfZero(RuleA, re("bool")).
-        Diff(jsonA, jsonB)
+		AddIgnoreIfZero(RuleA, re("number")).
+		AddIgnoreIfZero(RuleA, re("string")).
+		AddIgnoreIfZero(RuleA, re("strings")).
+		AddIgnoreIfZero(RuleA, re("objects")).
+		AddIgnoreIfZero(RuleA, re("bool")).
+		Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
+
+func TestFloatEqual(t *testing.T) {
+	const jsonA = `{
+        "float": 1234.003,
+        "floats": [1234.003],
+        "floatm": {"first": 1234.003}
+    }
+    `
+	const jsonB = `{
+        "float": 1234.1,
+        "floats": [1234.1],
+        "floatm": {"first": 1234.1}
+    }
+    `
+	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+
+	assert := assert.New(t)
+	lines, err := Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 3)
+
+	eq := func(a, b float64) bool {
+		abs := math.Abs(a - b)
+		ret := abs <= 1.0
+		return ret
+	}
+
+	lines, err = NewDiffer().AddFloatEqual(re(".*"), eq).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }

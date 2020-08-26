@@ -18,6 +18,7 @@ import (
    ignore: ignore matching keys
    ignoreIfZero: ignores matching keys if value is zero (false, "", 0, [] or {})
    orderby: sort slice of maps
+   floatEqual: adds function for comparing floats
 */
 type ruleAction int
 
@@ -26,7 +27,11 @@ const (
 	ignore
 	ignoreIfZero
 	orderby
+	floatEqual
 )
+
+// FloatEqualFn is a function comparing two floats
+type FloatEqualFunc func(float64, float64) bool
 
 type jsoner interface {
 	JSON() string
@@ -34,10 +39,11 @@ type jsoner interface {
 }
 
 type jsonI struct {
-	i interface{}
+	i              interface{}
+	floatEqualFunc FloatEqualFunc
 }
 
-func floatEqual(a, b float64) bool {
+func defaultFloatEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 1e-9
 }
 
@@ -63,7 +69,7 @@ func (i jsonI) isZero() bool {
 		case v.IsInt():
 			return v.MustInt() == 0
 		case v.IsFloat64():
-			return floatEqual(v.MustFloat64(), 0.0)
+			return i.floatEqualFunc(v.MustFloat64(), 0.0)
 		case v.IsStr():
 			return v.MustStr() == ""
 		case v.IsBool():
@@ -79,7 +85,7 @@ func (i jsonI) isZero() bool {
 	case int:
 		return v == 0
 	case float64:
-		return floatEqual(v, 0.0)
+		return i.floatEqualFunc(v, 0.0)
 	case string:
 		return v == ""
 	case bool:
@@ -104,11 +110,12 @@ func joinSelectors(mainSelector, selector string) string {
 }
 
 type rule struct {
-	selector    *regexp.Regexp
-	action      ruleAction
-	newKey      string
-	excludedKey string
-	orderByFunc func([]objx.Map)
+	selector       *regexp.Regexp
+	action         ruleAction
+	newKey         string
+	excludedKey    string
+	orderByFunc    func([]objx.Map)
+	floatEqualFunc FloatEqualFunc
 }
 
 type ruleDest int
@@ -163,6 +170,10 @@ func newOrderbyKeyRule(selector *regexp.Regexp, key string) *rule {
 
 func (d *Differ) AddOrderByKey(dest ruleDest, selector *regexp.Regexp, key string) *Differ {
 	return d.addRule(dest, newOrderbyKeyRule(selector, key))
+}
+
+func (d *Differ) AddFloatEqual(selector *regexp.Regexp, fn FloatEqualFunc) *Differ {
+	return d.addRule(RuleAB, &rule{selector: selector, action: floatEqual, floatEqualFunc: fn})
 }
 
 func (r *rule) match(selector string) bool {
@@ -308,6 +319,15 @@ func (d *Differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]obj
 	return retA, retB
 }
 
+func (d *Differ) floatEqualFunc(selector string) FloatEqualFunc {
+	for _, rule := range d.rulesA {
+		if rule.action == floatEqual && rule.match(selector) {
+			return rule.floatEqualFunc
+		}
+	}
+	return defaultFloatEqual
+}
+
 func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
@@ -318,7 +338,7 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 	}
 	// 2. types mismatch
 	if reflect.TypeOf(valueA.Data()) != reflect.TypeOf(valueB.Data()) {
-		d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		return nil
 	}
 
@@ -327,25 +347,26 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 		intA := valueA.MustBool()
 		intB := valueB.MustBool()
 		if intA != intB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case valueA.IsInt():
 		intA := valueA.MustInt()
 		intB := valueB.MustInt()
 		if intA != intB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case valueA.IsFloat64():
 		floatA := valueA.MustFloat64()
 		floatB := valueB.MustFloat64()
-		if !floatEqual(floatA, floatB) {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		floatEqualFunc := d.floatEqualFunc(selector)
+		if !floatEqualFunc(floatA, floatB) {
+			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
 		}
 	case valueA.IsStr():
 		strA := valueA.MustStr()
 		strB := valueB.MustStr()
 		if strA != strB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case valueA.IsObjxMapSlice():
 		err := d.diffObjxMapSlice(selector, valueA.MustObjxMapSlice(), valueB.MustObjxMapSlice())
@@ -418,7 +439,7 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 			intB = valueB.MustInt()
 		}
 		if intA != intB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case isFloat64(valueA, valueB):
 		var floatA, floatB float64
@@ -432,8 +453,9 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 		} else {
 			floatB = valueA.MustFloat64()
 		}
-		if !floatEqual(floatA, floatB) {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+		floatEqualFunc := d.floatEqualFunc(selector)
+		if !floatEqualFunc(floatA, floatB) {
+			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
 		}
 	case isStr(valueA, valueB):
 		var strA, strB string
@@ -448,7 +470,7 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 			strB = valueB.MustStr()
 		}
 		if strA != strB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case isBool(valueA, valueB):
 		//XXX: isBool check must be after isInt (and probably isStr) otherwise
@@ -465,7 +487,7 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 			intB = valueB.MustBool()
 		}
 		if intA != intB {
-			d.lineAB("", selector, jsonI{valueA}, jsonI{valueB})
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
 	case isInterSlice(valueA, valueB):
 		if valueA.IsNil() {
@@ -515,7 +537,9 @@ func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	iSliceB := valueB.MustInterSlice()
 	for idx, a := range iSliceA {
 		if len(iSliceB) <= idx {
-			d.lineA(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{a})
+			selector := joinSelectors(mainSelector, fmt.Sprintf("[%d]", idx))
+			floatEqualFunc := d.floatEqualFunc(selector)
+			d.lineA("", selector, jsonI{i: a, floatEqualFunc: floatEqualFunc})
 			continue
 		}
 		b := iSliceB[idx]
@@ -528,7 +552,9 @@ func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	if len(iSliceB) > len(iSliceA) {
 		for idx := len(iSliceA); idx != len(iSliceB); idx++ {
 			b := iSliceB[idx]
-			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{b})
+			selector := joinSelectors(mainSelector, fmt.Sprintf("[%d]", idx))
+			floatEqualFunc := d.floatEqualFunc(selector)
+			d.lineB("", selector, jsonI{i: b, floatEqualFunc: floatEqualFunc})
 		}
 	}
 	return nil
@@ -546,7 +572,9 @@ func (d *Differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map
 
 	for idx, a := range sliceA {
 		if len(sliceB) <= idx {
-			d.lineA(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{a})
+			selector := joinSelectors(mainSelector, fmt.Sprintf("[%d]", idx))
+			floatEqualFunc := d.floatEqualFunc(selector)
+			d.lineA("", selector, jsonI{i: a, floatEqualFunc: floatEqualFunc})
 			continue
 		}
 		b := sliceB[idx]
@@ -559,7 +587,9 @@ func (d *Differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map
 	if len(sliceB) > len(sliceA) {
 		for idx := len(sliceA); idx != len(sliceB); idx++ {
 			b := sliceB[idx]
-			d.lineB(mainSelector, fmt.Sprintf("[%d]", idx), jsonI{b})
+			selector := joinSelectors(mainSelector, fmt.Sprintf("[%d]", idx))
+			floatEqualFunc := d.floatEqualFunc(selector)
+			d.lineB("", selector, jsonI{i: b, floatEqualFunc: floatEqualFunc})
 		}
 	}
 	return nil
@@ -584,7 +614,9 @@ func (d *Differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 		valueA := objA.Get(keyA)
 		// 1. objB missing data
 		if !objB.Has(keyA) {
-			d.lineA(mainSelector, keyA, jsonI{valueA})
+			selector := joinSelectors(mainSelector, keyA)
+			floatEqualFunc := d.floatEqualFunc(selector)
+			d.lineA("", selector, jsonI{i: valueA, floatEqualFunc: floatEqualFunc})
 			continue
 		}
 		valueB := objB.Get(keyA)
@@ -599,7 +631,9 @@ func (d *Differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 		if _, found := visitedKeysA[keyB]; found {
 			continue
 		}
-		d.lineB(mainSelector, keyB, jsonI{objB.Get(keyB)})
+		selector := joinSelectors(mainSelector, keyB)
+		floatEqualFunc := d.floatEqualFunc(selector)
+		d.lineB("", selector, jsonI{i: objB.Get(keyB), floatEqualFunc: floatEqualFunc})
 	}
 
 	return nil
