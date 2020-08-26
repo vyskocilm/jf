@@ -78,8 +78,10 @@ func (i jsonI) isZero() bool {
 			return len(v.MustInterSlice()) == 0
 		case v.IsObjxMap():
 			return len(v.MustObjxMap()) == 0
+        case v.IsNil():
+            return true
 		default:
-			errmsg := fmt.Errorf("isZero does not support %s", i.String())
+			errmsg := fmt.Errorf("isZero does not support *objx.Value %+v", v.Data())
 			panic(errmsg)
 		}
 	case int:
@@ -91,7 +93,7 @@ func (i jsonI) isZero() bool {
 	case bool:
 		return v == false
 	}
-	errmsg := fmt.Errorf("isZero does not support %s", i.String())
+	errmsg := fmt.Errorf("isZero does not support %T %+v", i, i)
 	panic(errmsg)
 }
 
