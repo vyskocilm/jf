@@ -34,12 +34,12 @@ func TestSimpleMap(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 6)
 
-	assert.Equal(&SingleDiff{"bool", "true", "false"}, lines[0])
-	assert.Equal(&SingleDiff{"float", "11.1", "11.11"}, lines[1])
-	assert.Equal(&SingleDiff{"ints[2]", "1", "99"}, lines[2])
-	assert.Equal(&SingleDiff{"number", "42", "43"}, lines[3])
-	assert.Equal(&SingleDiff{"string", `"hello"`, `"hellp"`}, lines[4])
-	assert.Equal(&SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[5])
+	assert.Equal(SingleDiff{"bool", "true", "false"}, lines[0])
+	assert.Equal(SingleDiff{"float", "11.1", "11.11"}, lines[1])
+	assert.Equal(SingleDiff{"ints[2]", "1", "99"}, lines[2])
+	assert.Equal(SingleDiff{"number", "42", "43"}, lines[3])
+	assert.Equal(SingleDiff{"string", `"hello"`, `"hellp"`}, lines[4])
+	assert.Equal(SingleDiff{"strings[1]", `"world"`, `"worle"`}, lines[5])
 }
 
 // TestDifferentKeys tests the case that in MSI there are different keys
@@ -57,8 +57,8 @@ func TestDifferentKeys(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 2)
 
-	assert.Equal(&SingleDiff{"numberA", "42", ""}, lines[0])
-	assert.Equal(&SingleDiff{"numberB", "", "42"}, lines[1])
+	assert.Equal(SingleDiff{"numberA", "42", ""}, lines[0])
+	assert.Equal(SingleDiff{"numberB", "", "42"}, lines[1])
 }
 
 // TestDifferentArrays sizes
@@ -80,11 +80,11 @@ func TestDifferentArrays(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 5)
 
-	assert.Equal(&SingleDiff{"bigger[1]", "", "20"}, lines[0])
-	assert.Equal(&SingleDiff{"bigger[2]", "", "30"}, lines[1])
-	assert.Equal(&SingleDiff{"smaller[1]", "2", ""}, lines[2])
-	assert.Equal(&SingleDiff{"weird[0]", "10", "30"}, lines[3])
-	assert.Equal(&SingleDiff{"weird[1]", "20", "40"}, lines[4])
+	assert.Equal(SingleDiff{"bigger[1]", "", "20"}, lines[0])
+	assert.Equal(SingleDiff{"bigger[2]", "", "30"}, lines[1])
+	assert.Equal(SingleDiff{"smaller[1]", "2", ""}, lines[2])
+	assert.Equal(SingleDiff{"weird[0]", "10", "30"}, lines[3])
+	assert.Equal(SingleDiff{"weird[1]", "20", "40"}, lines[4])
 }
 
 func TestMapInMap(t *testing.T) {
@@ -105,7 +105,7 @@ func TestMapInMap(t *testing.T) {
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"key.name", `"joe"`, `"Joe"`}, lines[0])
+	assert.Equal(SingleDiff{"key.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapInMapInMap(t *testing.T) {
@@ -130,7 +130,7 @@ func TestMapInMapInMap(t *testing.T) {
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"key.subkey.name", `"joe"`, `"Joe"`}, lines[0])
+	assert.Equal(SingleDiff{"key.subkey.name", `"joe"`, `"Joe"`}, lines[0])
 }
 
 func TestMapSlice(t *testing.T) {
@@ -153,8 +153,8 @@ func TestMapSlice(t *testing.T) {
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 2)
-	assert.Equal(&SingleDiff{"data[0].name", `"one"`, `"One"`}, lines[0])
-	assert.Equal(&SingleDiff{"data[1].name", `"two"`, `"Two"`}, lines[1])
+	assert.Equal(SingleDiff{"data[0].name", `"one"`, `"One"`}, lines[0])
+	assert.Equal(SingleDiff{"data[1].name", `"two"`, `"Two"`}, lines[1])
 }
 
 func TestNil(t *testing.T) {
@@ -169,7 +169,7 @@ func TestNil(t *testing.T) {
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"key", "null", "42"}, lines[0])
+	assert.Equal(SingleDiff{"key", "null", "42"}, lines[0])
 }
 
 // TestCoerceNull tests null coercion of jsonA only, jsonB only and both
@@ -194,7 +194,7 @@ func TestCoerceNull(t *testing.T) {
 	lines, err = NewDiffer().AddCoerceNull(RuleB, dotStar).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"key", "null", "0"}, lines[0])
+	assert.Equal(SingleDiff{"key", "null", "0"}, lines[0])
 	// 3. coercion of A/B, return 0 lines
 	lines, err = NewDiffer().AddCoerceNull(RuleAB, dotStar).Diff(jsonA, jsonB)
 	assert.NoError(err)
@@ -223,7 +223,7 @@ func TestCoerceNullMatch(t *testing.T) {
 	lines, err := NewDiffer().AddCoerceNull(RuleA, keyDotSubkey1).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"key.subkey2", "null", "0"}, lines[0])
+	assert.Equal(SingleDiff{"key.subkey2", "null", "0"}, lines[0])
 }
 
 func TestIgnore(t *testing.T) {
@@ -242,7 +242,7 @@ func TestIgnore(t *testing.T) {
 	lines, err := NewDiffer().AddIgnore(RuleA, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
-	assert.Equal(&SingleDiff{"additional", "", "42"}, lines[0])
+	assert.Equal(SingleDiff{"additional", "", "42"}, lines[0])
 
 	lines, err = NewDiffer().AddIgnore(RuleB, additional).Diff(jsonA, jsonB)
 	assert.NoError(err)

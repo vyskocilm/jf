@@ -199,7 +199,7 @@ func (d *SingleDiff) B() string {
 	return d.valueB
 }
 
-type DiffList []*SingleDiff
+type DiffList []SingleDiff
 type rules []*rule
 
 type Differ struct {
@@ -228,7 +228,7 @@ func (d *Differ) lineA(mainSelector, selector string, valueA jsoner) {
 	}
 	d.diff = append(
 		d.diff,
-		&SingleDiff{
+		SingleDiff{
 			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   "",
@@ -247,7 +247,7 @@ func (d *Differ) lineAB(mainSelector, selector string, valueA, valueB jsoner) {
 	}
 	d.diff = append(
 		d.diff,
-		&SingleDiff{
+		SingleDiff{
 			selector: selector,
 			valueA:   valueA.JSON(),
 			valueB:   valueB.JSON(),
@@ -266,7 +266,7 @@ func (d *Differ) lineB(mainSelector, selector string, valueB jsoner) {
 	}
 	d.diff = append(
 		d.diff,
-		&SingleDiff{
+		SingleDiff{
 			selector: selector,
 			valueA:   "",
 			valueB:   valueB.JSON(),
@@ -673,11 +673,11 @@ func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 
 	objA, err := objx.FromJSON(jsonA)
 	if err != nil {
-		return []*SingleDiff{}, err
+		return []SingleDiff{}, err
 	}
 	objB, err := objx.FromJSON(jsonB)
 	if err != nil {
-		return []*SingleDiff{}, err
+		return []SingleDiff{}, err
 	}
 
 	d2 := Differ{
