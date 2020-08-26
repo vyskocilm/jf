@@ -24,21 +24,18 @@ strings[1] "world" "worle"
 ## Features
 
 1. compare primitive values, ints, floats, bools and strings
-2. compare arrays
-3. compare other than root map
+2. allows a specification of float equality function (can be used for int/float coercion)
+3. compare arrays and maps
 4. null coerce for A/B or both jsons
 5. ignore certain keys
-6. sort slice of maps by single in key
+6. sort slice of maps by single id key (WIP: this shall be revised)
 7. basic cmdline tool
 
 ## TODO
 
-1. stringify numbers    ("42" == 42)
-2. Go API (WIP)
-3. rename keys
-4. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
-5. better sorting support
-6. ...
+1. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
+2. better sorting support
+3. custom comparator on objx.Value/objx.Value???
 
 ## Simple values
 ```
@@ -87,5 +84,3 @@ key.subkey.name "joe" "Joe"
 ```
 
 See [jsondiff_test.go](jsondiff_test.go) for more examples.
-
-

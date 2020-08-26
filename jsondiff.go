@@ -328,6 +328,22 @@ func (d *Differ) floatEqualFunc(selector string) FloatEqualFunc {
 	return defaultFloatEqual
 }
 
+// mustFloat64 unpack int of float64 as float64
+func mustFloat64(v *objx.Value) float64 {
+	if v.IsInt() {
+		return float64(v.MustInt())
+	}
+	return v.MustFloat64()
+}
+
+// float64 returns number or zero, coerce int to float64
+func float64OrZero(v *objx.Value) float64 {
+	if v.IsInt() {
+		return float64(v.Int(0))
+	}
+	return v.Float64(0.0)
+}
+
 func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
@@ -336,13 +352,28 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 		(shouldCoerceB && valueB.IsNil()) {
 		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoerceA, shouldCoerceB)
 	}
+
+	// coerce ints and floats by default
+	if (valueA.IsInt() || valueA.IsFloat64()) &&
+		(valueB.IsInt() || valueB.IsInt()) {
+		goto skipTypeCheck
+	}
+
 	// 2. types mismatch
 	if reflect.TypeOf(valueA.Data()) != reflect.TypeOf(valueB.Data()) {
 		d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		return nil
 	}
 
+skipTypeCheck:
 	switch {
+	case valueA.IsFloat64() || valueB.IsFloat64():
+		floatA := mustFloat64(valueA)
+		floatB := mustFloat64(valueB)
+		floatEqualFunc := d.floatEqualFunc(selector)
+		if !floatEqualFunc(floatA, floatB) {
+			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
+		}
 	case valueA.IsBool() && valueB.IsBool():
 		intA := valueA.MustBool()
 		intB := valueB.MustBool()
@@ -354,13 +385,6 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 		intB := valueB.MustInt()
 		if intA != intB {
 			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
-		}
-	case valueA.IsFloat64():
-		floatA := valueA.MustFloat64()
-		floatB := valueB.MustFloat64()
-		floatEqualFunc := d.floatEqualFunc(selector)
-		if !floatEqualFunc(floatA, floatB) {
-			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
 		}
 	case valueA.IsStr():
 		strA := valueA.MustStr()
@@ -397,7 +421,7 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, coerceA, coerceB bool) error {
 
 	orNil := func(isType func(v *objx.Value) bool, valueA, valueB *objx.Value) bool {
-		return (isType(valueA) || (coerceA && valueA.IsNil())) ||
+		return (isType(valueA) || (coerceA && valueA.IsNil())) &&
 			(isType(valueB) || (coerceB && valueB.IsNil()))
 	}
 	isBool := func(valueA, valueB *objx.Value) bool {
@@ -409,8 +433,12 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 		return orNil(isTyp, valueA, valueB)
 	}
 	isFloat64 := func(valueA, valueB *objx.Value) bool {
-		isTyp := func(v *objx.Value) bool { return v.IsFloat64() }
-		return orNil(isTyp, valueA, valueB)
+		// simply - either valueA or valueB must be float64
+		//          and if so, then valueA/valueB can be one of float64/int/null
+		// iow isFloat64(int, int) returns false
+		return (valueA.IsFloat64() || valueB.IsFloat64()) &&
+			((valueA.IsFloat64() || valueA.IsInt() || (coerceA && valueA.IsNil())) &&
+				(valueB.IsFloat64() || valueB.IsInt() || (coerceB && valueB.IsNil())))
 	}
 	isStr := func(valueA, valueB *objx.Value) bool {
 		isTyp := func(v *objx.Value) bool { return v.IsStr() }
@@ -426,6 +454,22 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 	}
 
 	switch {
+	case isFloat64(valueA, valueB):
+		var floatA, floatB float64
+		if coerceA {
+			floatA = float64OrZero(valueA)
+		} else {
+			floatA = mustFloat64(valueA)
+		}
+		if coerceB {
+			floatB = float64OrZero(valueB)
+		} else {
+			floatB = mustFloat64(valueB)
+		}
+		floatEqualFunc := d.floatEqualFunc(selector)
+		if !floatEqualFunc(floatA, floatB) {
+			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
+		}
 	case isInt(valueA, valueB):
 		var intA, intB int
 		if coerceA {
@@ -440,22 +484,6 @@ func (d *Differ) diffValuesCoerced(selector string, valueA, valueB *objx.Value, 
 		}
 		if intA != intB {
 			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
-		}
-	case isFloat64(valueA, valueB):
-		var floatA, floatB float64
-		if coerceA {
-			floatA = valueA.Float64(0.0)
-		} else {
-			floatA = valueA.MustFloat64()
-		}
-		if coerceB {
-			floatB = valueA.Float64(0.0)
-		} else {
-			floatB = valueA.MustFloat64()
-		}
-		floatEqualFunc := d.floatEqualFunc(selector)
-		if !floatEqualFunc(floatA, floatB) {
-			d.lineAB("", selector, jsonI{valueA, floatEqualFunc}, jsonI{valueB, floatEqualFunc})
 		}
 	case isStr(valueA, valueB):
 		var strA, strB string

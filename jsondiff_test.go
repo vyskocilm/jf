@@ -305,6 +305,7 @@ func TestIgnoreZero(t *testing.T) {
 	assert.Len(lines, 0)
 }
 
+// test custom float function
 func TestFloatEqual(t *testing.T) {
 	const jsonA = `{
         "float": 1234.003,
@@ -316,6 +317,38 @@ func TestFloatEqual(t *testing.T) {
         "float": 1234.1,
         "floats": [1234.1],
         "floatm": {"first": 1234.1}
+    }
+    `
+	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+
+	assert := assert.New(t)
+	lines, err := Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 3)
+
+	eq := func(a, b float64) bool {
+		abs := math.Abs(a - b)
+		ret := abs <= 0.5
+		return ret
+	}
+
+	lines, err = NewDiffer().AddFloatEqual(re(".*"), eq).Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
+
+// test int to float coercion
+func TestFloatIntEqual(t *testing.T) {
+	const jsonA = `{
+        "float": 1234.003,
+        "floats": [1234.003],
+        "floatm": {"first": 1234.003}
+    }
+    `
+	const jsonB = `{
+        "float": 1234,
+        "floats": [1234],
+        "floatm": {"first": 1234}
     }
     `
 	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
