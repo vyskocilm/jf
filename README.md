@@ -21,14 +21,16 @@ string     "hello" "hellp"
 strings[1] "world" "worle"
 ```
 
-**Warning**: depends on `reflect` and `gihub.com/stretchr/objx` and both MAY panic in some circumstances.
-Package `jf` type checks everything before use, so it uses methods like `value.MustInt()`. However it panic
-itself if code ends in an impossible (or not yet implemented one) situation. For example if comparing code
-find a weird type of `interface{}` or `*objx.Value` passed in, like Go channel or a pointer. Those can't be
-passed in JSON. So it is *recommended* to run the code in gorutine if panic is not appropriate error
-handling strategy for you.
+**Warning**: depends on `reflect` and `gihub.com/stretchr/objx` and both MAY
+panic in some circumstances.  Package `jf` type checks everything before use,
+so it uses methods like `value.MustInt()`. However it panic itself if code ends
+in an impossible (or not yet implemented one) situation. For example if
+diffing code finds a weird type of `interface{}` or `*objx.Value` passed in,
+like Go channel or a pointer. Those can't be passed in JSON.
 
-Anyway panic of `jf` is allways a sign of a bug or missing feature, so do not forget to create [an issue on GitHub](https://github.com/vyskocilm/jf/issues) if you will find one.
+In any case. Panic of `jf` is always a sign of a bug or missing feature, so do
+not forget to create [an issue on GitHub](https://github.com/vyskocilm/jf/issues)
+if you will find one.
 
 ## Features
 
