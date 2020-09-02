@@ -34,7 +34,7 @@ func js(pathA, pathB string) (string, string, error) {
 	return jsA, jsB, nil
 }
 
-func makeRules(d *jf.Differ, ignoreB, sortAllBySelector, sortAllByKey *string) error {
+func makeRules(d *jf.Differ, ignoreB *string) error {
 
 	if *ignoreB != "" {
 		rg, err := regexp.Compile(*ignoreB)
@@ -44,14 +44,6 @@ func makeRules(d *jf.Differ, ignoreB, sortAllBySelector, sortAllByKey *string) e
 		d.AddIgnore(jf.RuleB, rg)
 	}
 
-	if *sortAllBySelector != "" && *sortAllByKey != "" {
-		rg, err := regexp.Compile(*sortAllBySelector)
-		if err != nil {
-			return err
-		}
-		d.AddOrderByKey(jf.RuleAB, rg, *sortAllByKey)
-	}
-
 	return nil
 }
 
@@ -59,14 +51,12 @@ func main() {
 
 	// FIXME: specify meaningful cmd arguments
 	var (
-		ignoreB           = flag.String("x-ignore-b", "", "ignore keys from b.json")
-		sortAllBySelector = flag.String("x-sort-all-selector", "", "selector for slices to be sorted")
-		sortAllByKey      = flag.String("x-sort-all-key", "", "key for sorting")
+		ignoreB = flag.String("x-ignore-b", "", "ignore keys from b.json")
 	)
 	flag.Parse()
 
 	d := jf.NewDiffer()
-	err := makeRules(d, ignoreB, sortAllBySelector, sortAllByKey)
+	err := makeRules(d, ignoreB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error parsing commandline flags: %s", err)
 		os.Exit(exitTroubles)
