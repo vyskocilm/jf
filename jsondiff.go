@@ -1,4 +1,24 @@
-// jf: diff for JSON
+// jf provides diffing of arbitrary jsons
+//
+// The result of a diff is a
+//
+//      type SingleDiff struct {
+//	        selector string
+//    	    valueA   string
+//    	    valueB   string
+//      }
+//
+// Where selector is JSON path selector describing the place where the
+// difference was found. For example consider following inputs
+//
+//      {"data": {"key": "foo"}}
+//      {"data": {"key": "bar"}}
+//
+//      SingleDiff{selector: "data.key", valueA: "foo", valueB: "bar"}
+//
+// jf does exact diffing by default, but can be instructed to coerce or ignore
+// certain part of JSON.
+
 package jf
 
 import (
@@ -18,6 +38,7 @@ import (
    ignore: ignore matching keys
    ignoreIfZero: ignores matching keys if value is zero (false, "", 0, [] or {})
    floatEqual: adds function for comparing floats
+   ignoreOrder: ignore order of arrays (nop for other types)
 */
 type ruleAction int
 
@@ -626,8 +647,9 @@ func (d *Differ) diffMap(mainSelector string, objA objx.Map, objB objx.Map) erro
 	return nil
 }
 
-// Diff returns a list of individual list by comparing the jsonA and jsonB inputs
-// supports arbitrary JSON files, if the top level is map of strings
+// Diff returns a list of individual differences by comparing the jsonA and
+// jsonB inputs supports arbitrary JSON files, if the top level is map of
+// strings
 func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 
 	objA, err := objx.FromJSON(jsonA)
@@ -652,6 +674,7 @@ func (d *Differ) Diff(jsonA, jsonB string) (DiffList, error) {
 
 }
 
+// Diff is a shortcut for NewDiffer().Diff, exact diffing without any filters
 func Diff(jsonA, jsonB string) (DiffList, error) {
 	return NewDiffer().Diff(jsonA, jsonB)
 }
