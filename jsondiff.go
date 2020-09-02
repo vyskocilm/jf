@@ -17,7 +17,6 @@ import (
    coercenull: make null == false, "", {} or [], 0
    ignore: ignore matching keys
    ignoreIfZero: ignores matching keys if value is zero (false, "", 0, [] or {})
-   orderby: sort slice of maps
    floatEqual: adds function for comparing floats
 */
 type ruleAction int
@@ -26,7 +25,6 @@ const (
 	coercenull ruleAction = iota
 	ignore
 	ignoreIfZero
-	orderby
 	floatEqual
 )
 
@@ -78,8 +76,8 @@ func (i jsonI) isZero() bool {
 			return len(v.MustInterSlice()) == 0
 		case v.IsObjxMap():
 			return len(v.MustObjxMap()) == 0
-        case v.IsNil():
-            return true
+		case v.IsNil():
+			return true
 		default:
 			errmsg := fmt.Errorf("isZero does not support *objx.Value %+v", v.Data())
 			panic(errmsg)
@@ -155,23 +153,6 @@ func (d *Differ) AddIgnore(dest ruleDest, selector *regexp.Regexp) *Differ {
 // AddIgnoreIfEmpty adds selectors, which will be ignored in a case value is empty
 func (d *Differ) AddIgnoreIfZero(dest ruleDest, selector *regexp.Regexp) *Differ {
 	return d.addRule(dest, &rule{selector: selector, action: ignoreIfZero})
-}
-
-// FIXME: can't specify the orderding rules
-func newOrderbyKeyRule(selector *regexp.Regexp, key string) *rule {
-	r := &rule{selector: selector, action: orderby}
-	r.orderByFunc = func(msi []objx.Map) {
-		sort.Slice(msi, func(i, j int) bool {
-			intI := msi[i].Get(key).MustInt()
-			intJ := msi[j].Get(key).MustInt()
-			return intI < intJ
-		})
-	}
-	return r
-}
-
-func (d *Differ) AddOrderByKey(dest ruleDest, selector *regexp.Regexp, key string) *Differ {
-	return d.addRule(dest, newOrderbyKeyRule(selector, key))
 }
 
 func (d *Differ) AddFloatEqual(selector *regexp.Regexp, fn FloatEqualFunc) *Differ {
@@ -303,22 +284,6 @@ func (d *Differ) shouldIgnore(selector string) (bool, bool) {
 
 func (d *Differ) shouldIgnoreIfZero(selector string) (bool, bool) {
 	return d.matchRule(selector, ignoreIfZero)
-}
-
-func (d *Differ) orderByFuncs(selector string) ([]func([]objx.Map), []func([]objx.Map)) {
-	retA := make([]func([]objx.Map), 0)
-	for _, rule := range d.rulesA {
-		if rule.action == orderby && rule.match(selector) {
-			retA = append(retA, rule.orderByFunc)
-		}
-	}
-	retB := make([]func([]objx.Map), 0)
-	for _, rule := range d.rulesB {
-		if rule.action == orderby && rule.match(selector) {
-			retB = append(retB, rule.orderByFunc)
-		}
-	}
-	return retA, retB
 }
 
 func (d *Differ) floatEqualFunc(selector string) FloatEqualFunc {
@@ -591,14 +556,6 @@ func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 }
 
 func (d *Differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map) error {
-
-	orderByA, orderByB := d.orderByFuncs(mainSelector)
-	for _, oba := range orderByA {
-		oba(sliceA)
-	}
-	for _, obb := range orderByB {
-		obb(sliceB)
-	}
 
 	for idx, a := range sliceA {
 		if len(sliceB) <= idx {

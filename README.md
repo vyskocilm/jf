@@ -39,15 +39,14 @@ if you will find one.
 3. compare arrays and maps
 4. null coerce for A/B or both jsons
 5. ignore certain keys
-6. sort slice of maps by single id key (WIP: this shall be revised)
-7. basic cmdline tool
+6. basic cmdline tool
 
 ## TODO
 
 0. API docs
 1. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
-2. better sorting support
-3. custom comparator on objx.Value/objx.Value???
+2. ignore order of arrays
+3. custom comparator on objx.Value/objx.Value or string???
 
 ## Simple values
 ```
