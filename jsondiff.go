@@ -47,6 +47,7 @@ const (
 	ignore
 	ignoreIfZero
 	floatEqual
+	ignoreOrder
 )
 
 // FloatEqualFn is a function comparing two floats
@@ -180,6 +181,11 @@ func (d *Differ) AddFloatEqual(selector *regexp.Regexp, fn FloatEqualFunc) *Diff
 	return d.addRule(RuleAB, &rule{selector: selector, action: floatEqual, floatEqualFunc: fn})
 }
 
+// AddIgnoreRule ignores order of arrays, so [1, 2, 3] == [3, 2, 1]
+func (d *Differ) AddIgnoreOrder(selector *regexp.Regexp) *Differ {
+	return d.addRule(RuleAB, &rule{selector: selector, action: ignoreOrder})
+}
+
 func (r *rule) match(selector string) bool {
 	return r.selector.MatchString(selector)
 }
@@ -217,6 +223,15 @@ func NewDiffer() *Differ {
 		diff:   make(DiffList, 0, 64),
 		rulesA: nil,
 		rulesB: nil}
+}
+
+// clone creates an empty Differ with the same set of rules
+func (d *Differ) clone() *Differ {
+	return &Differ{
+		diff:   make(DiffList, 0, 64),
+		rulesA: d.rulesA,
+		rulesB: d.rulesB,
+	}
 }
 
 // lineA adds line with empty B value
@@ -314,6 +329,11 @@ func (d *Differ) floatEqualFunc(selector string) FloatEqualFunc {
 		}
 	}
 	return defaultFloatEqual
+}
+
+func (d *Differ) shouldIgnoreOrder(selector string) bool {
+	a, _ := d.matchRule(selector, ignoreOrder)
+	return a
 }
 
 // mustFloat64 unpack int of float64 as float64
@@ -549,6 +569,17 @@ func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 	if !valueA.IsInterSlice() || !valueA.IsInterSlice() {
 		return fmt.Errorf("type mismatch for %s, valueA or valueB is not []interface{}, this is programming error", mainSelector)
 	}
+
+	if d.shouldIgnoreOrder(mainSelector) {
+		equal, err := d.diffInterSliceDetectEquals(mainSelector, valueA, valueB)
+		if err != nil {
+			return err
+		}
+		if equal {
+			return nil
+		}
+	}
+
 	iSliceA := valueA.MustInterSlice()
 	iSliceB := valueB.MustInterSlice()
 	for idx, a := range iSliceA {
@@ -574,6 +605,59 @@ func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB 
 		}
 	}
 	return nil
+}
+
+type intSet map[int]struct{}
+
+func newIntSet() intSet {
+	return make(map[int]struct{})
+}
+
+func (s intSet) Add(v int) {
+	s[v] = struct{}{}
+}
+
+func (s intSet) Has(v int) bool {
+	_, has := s[v]
+	return has
+}
+
+func (d *Differ) diffInterSliceDetectEquals(mainSelector string, valueA *objx.Value, valueB *objx.Value) (bool, error) {
+
+	idxEqualA := newIntSet()
+	idxEqualB := newIntSet()
+
+	if !valueA.IsInterSlice() || !valueA.IsInterSlice() {
+		return false, fmt.Errorf("type mismatch for %s, valueA or valueB is not []interface{}, this is programming error", mainSelector)
+	}
+
+	iSliceA := valueA.MustInterSlice()
+	iSliceB := valueB.MustInterSlice()
+
+	// clone Differ with empty diff - this help code reuse and won't mess with
+	// the main diff
+	other := d.clone()
+	for idxA, a := range iSliceA {
+		for idxB, b := range iSliceB {
+			if idxEqualB.Has(idxB) {
+				continue
+			}
+
+			other.diff = make(DiffList, 0, 64)
+			err := other.diffValues(joinSelectors(mainSelector, fmt.Sprintf("[%d]", idxA)), newValue(a), newValue(b))
+			if err != nil {
+				return false, err
+			}
+			if len(other.diff) == 0 {
+				idxEqualA.Add(idxA)
+				idxEqualB.Add(idxB)
+				break
+			}
+		}
+		idxEqualA.Add(idxA)
+	}
+
+	return len(idxEqualA) == len(iSliceA) && len(idxEqualB) == len(iSliceB), nil
 }
 
 func (d *Differ) diffObjxMapSlice(mainSelector string, sliceA, sliceB []objx.Map) error {

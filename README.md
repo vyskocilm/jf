@@ -21,12 +21,12 @@ string     "hello" "hellp"
 strings[1] "world" "worle"
 ```
 
-**Warning**: depends on `reflect` and `gihub.com/stretchr/objx` and both MAY
+**Warning**: depends on `reflect` and `gihub.com/stretchr/objx` and both CAN
 panic in some circumstances.  Package `jf` type checks everything before use,
-so it uses methods like `value.MustInt()`. However it panic itself if code ends
+so it uses methods like `value.MustInt()`. However it panics itself if code ends
 in an impossible (or not yet implemented one) situation. For example if
-diffing code finds a weird type of `interface{}` or `*objx.Value` passed in,
-like Go channel or a pointer. Those can't be passed in JSON.
+diffing code finds a weird type of `interface{}`, like Go channel or a pointer.
+Those can't be passed in JSON.
 
 In any case. Panic of `jf` is always a sign of a bug or missing feature, so do
 not forget to create [an issue on GitHub](https://github.com/vyskocilm/jf/issues)
@@ -40,13 +40,13 @@ if you will find one.
 4. null coerce for A/B or both jsons
 5. ignore certain keys
 6. basic cmdline tool
+7. ignore order of arrays
 
 ## TODO
 
 0. API docs
 1. flags for cmdline tool (those starting by `x-` are temporary only and will be dropped)
-2. ignore order of arrays
-3. custom comparator on objx.Value/objx.Value or string???
+2. custom comparator on objx.Value/objx.Value or string???
 
 ## Simple values
 ```

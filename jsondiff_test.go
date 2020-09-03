@@ -339,3 +339,21 @@ func TestFloatIntEqual(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
+
+// test ignore order for slices
+func TestIgnoreOrder(t *testing.T) {
+	const jsonA = `{
+        "list": [1, 2, 3]
+    }
+    `
+	const jsonB = `{
+        "list": [3, 2, 1]
+    }
+    `
+	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+
+	assert := assert.New(t)
+	lines, err := NewDiffer().AddIgnoreOrder(re("list")).Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
