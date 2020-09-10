@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/stretchr/objx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -367,6 +368,42 @@ func TestStringNumber(t *testing.T) {
     `
 	assert := assert.New(t)
 	lines, err := NewDiffer().AddStringNumber(re(t, ".*")).Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
+
+// test number equal number
+func TestCustomEqual(t *testing.T) {
+	const jsonA = `{
+        "int": 1110
+    }
+    `
+	const jsonB = `{
+        "int": 1120
+    }
+    `
+
+	// return true only if both are numbers and difference is less than 10
+	// artifical example as I know the types of items
+	eq := func(selector string, a, b *objx.Value) bool {
+		if selector != "int" {
+			return false
+		}
+		if !a.IsInt() || !b.IsInt() {
+			return false
+		}
+		intA := a.MustInt()
+		intB := a.MustInt()
+		diff := intA - intB
+		if diff < 0 {
+			diff *= -1
+		}
+
+		return diff < 20
+	}
+
+	assert := assert.New(t)
+	lines, err := NewDiffer().AddCustomEqual(re(t, ".*"), eq).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }

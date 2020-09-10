@@ -61,6 +61,7 @@ import (
    floatEqual: adds function for comparing floats
    ignoreOrder: ignore order of arrays (nop for other types)
    stringnumber: make "1" equal 1
+   customEqual: custom diffing func
 */
 type ruleAction int
 
@@ -71,10 +72,19 @@ const (
 	floatEqual
 	ignoreOrder
 	stringNumber
+	customEqual
 )
 
 // FloatEqualFn is a function comparing two floats
 type FloatEqualFunc func(float64, float64) bool
+
+// CustomeEqualFn is a function implementing custom comparsion for a
+// selector and two *obj.Value. If this matches, then
+//  * all other rules does not apply
+//  * jf will stop the recursion to items below
+//  * if applied on items with ignored order, then selector
+//    matches either jsonA, either jsonB
+type CustomEqualFunc func(string, *objx.Value, *objx.Value) bool
 
 type jsoner interface {
 	JSON() string
@@ -155,9 +165,10 @@ func joinSelectors(mainSelector, selector string) string {
 }
 
 type rule struct {
-	selector       *regexp.Regexp
-	action         ruleAction
-	floatEqualFunc FloatEqualFunc
+	selector        *regexp.Regexp
+	action          ruleAction
+	floatEqualFunc  FloatEqualFunc
+	customEqualFunc CustomEqualFunc
 }
 
 type ruleDest int
@@ -211,6 +222,14 @@ func (d *Differ) AddIgnoreOrder(selector *regexp.Regexp) *Differ {
 // AddStringNumber equals "1" == 1
 func (d *Differ) AddStringNumber(selector *regexp.Regexp) *Differ {
 	return d.addRule(RuleAB, &rule{selector: selector, action: stringNumber})
+}
+
+// AddCustomEqualFunc adds a function for comparing custom values.
+// Note this function is special and precedes all the other rules except ignore
+// order for arrays. In this specific case provided JSON Path selector applies to
+// jsonA or jsonB
+func (d *Differ) AddCustomEqual(selector *regexp.Regexp, fn CustomEqualFunc) *Differ {
+	return d.addRule(RuleAB, &rule{selector: selector, action: customEqual, customEqualFunc: fn})
 }
 
 func (r *rule) match(selector string) bool {
@@ -372,6 +391,15 @@ func (d *Differ) shouldConvertStringToNumber(selector string) bool {
 	return a
 }
 
+func (d *Differ) customEqualFunc(selector string) (CustomEqualFunc, bool) {
+	for _, rule := range d.rulesA {
+		if rule.action == customEqual && rule.match(selector) {
+			return rule.customEqualFunc, true
+		}
+	}
+	return func(string, *objx.Value, *objx.Value) bool { return false }, false
+}
+
 // mustFloat64 unpack int of float64 as float64
 func mustFloat64(v *objx.Value) float64 {
 	if v.IsInt() {
@@ -411,6 +439,13 @@ func tryAsNumber(valueA *objx.Value) *objx.Value {
 }
 
 func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
+
+	if customEqualFunc, has := d.customEqualFunc(selector); has {
+		if !customEqualFunc(selector, valueA, valueB) {
+			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
+		}
+		return nil
+	}
 
 	// 1. coercion rules can solve nil case
 	shouldCoerceA, shouldCoerceB := d.shouldCoerceNull(selector)
