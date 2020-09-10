@@ -217,7 +217,7 @@ func TestCoerceNullMatch(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-	keyDotSubkey1, err := regexp.Compile("key\\.subkey1")
+	keyDotSubkey1, err := regexp.Compile(`key\.subkey1`)
 	assert.NoError(err)
 
 	lines, err := NewDiffer().AddCoerceNull(RuleA, keyDotSubkey1).Diff(jsonA, jsonB)

@@ -116,7 +116,7 @@ func (i jsonI) isZero() bool {
 		case v.IsStr():
 			return v.MustStr() == ""
 		case v.IsBool():
-			return v.MustBool() == false
+			return !v.MustBool()
 		case v.IsInterSlice():
 			return len(v.MustInterSlice()) == 0
 		case v.IsObjxMap():
@@ -134,7 +134,7 @@ func (i jsonI) isZero() bool {
 	case string:
 		return v == ""
 	case bool:
-		return v == false
+		return !v
 	}
 	errmsg := fmt.Errorf("isZero does not support %T %+v", i, i)
 	panic(errmsg)
@@ -157,9 +157,6 @@ func joinSelectors(mainSelector, selector string) string {
 type rule struct {
 	selector       *regexp.Regexp
 	action         ruleAction
-	newKey         string
-	excludedKey    string
-	orderByFunc    func([]objx.Map)
 	floatEqualFunc FloatEqualFunc
 }
 
@@ -430,7 +427,7 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// coerce ints and floats by default
 	if (valueA.IsInt() || valueA.IsFloat64()) &&
-		(valueB.IsInt() || valueB.IsInt()) {
+		(valueB.IsInt() || valueB.IsFloat64()) {
 		goto skipTypeCheck
 	}
 
@@ -633,7 +630,7 @@ func newValue(i interface{}) *objx.Value {
 }
 
 func (d *Differ) diffInterSlice(mainSelector string, valueA *objx.Value, valueB *objx.Value) error {
-	if !valueA.IsInterSlice() || !valueA.IsInterSlice() {
+	if !valueA.IsInterSlice() || !valueB.IsInterSlice() {
 		return fmt.Errorf("type mismatch for %s, valueA or valueB is not []interface{}, this is programming error", mainSelector)
 	}
 
@@ -694,7 +691,7 @@ func (d *Differ) diffInterSliceDetectEquals(mainSelector string, valueA *objx.Va
 	idxEqualA := newIntSet()
 	idxEqualB := newIntSet()
 
-	if !valueA.IsInterSlice() || !valueA.IsInterSlice() {
+	if !valueA.IsInterSlice() || !valueB.IsInterSlice() {
 		return false, fmt.Errorf("type mismatch for %s, valueA or valueB is not []interface{}, this is programming error", mainSelector)
 	}
 
