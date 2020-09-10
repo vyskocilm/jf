@@ -11,13 +11,33 @@
 // Where selector is JSON path selector describing the place where the
 // difference was found. For example consider following inputs
 //
-//      {"data": {"key": "foo"}}
-//      {"data": {"key": "bar"}}
+//      const a=`{"data": {"key": "foo"}}`
+//      const b=`{"data": {"key": "bar"}}`
 //
+//      diff, err := Diff(a, b)
+//
+//      // diff[0]
 //      SingleDiff{selector: "data.key", valueA: "foo", valueB: "bar"}
 //
 // jf does exact diffing by default, but can be instructed to coerce or ignore
 // certain part of JSON.
+//
+// To deal with a real world complexities, jf can skip or transform parts of
+// JSONs during the transformation. The Differ can save the transformation
+// rules, which will change the jf behavior.
+//
+//	const a = `{"list": [1, 2, 3]}`
+//  const jsonB = `{"list": [3, 2, 1]}`
+//	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+//
+//	lines, err := NewDiffer().AddIgnoreOrder(re("list")).Diff(jsonA, jsonB)
+//
+//  len(lines)
+//  0
+//
+//  Each key is regexp matched to json PATH of a current element, so "list"
+//  means apply to ANY path, with string list inside.
+//
 
 package jf
 
@@ -28,6 +48,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/stretchr/objx"
@@ -39,6 +60,7 @@ import (
    ignoreIfZero: ignores matching keys if value is zero (false, "", 0, [] or {})
    floatEqual: adds function for comparing floats
    ignoreOrder: ignore order of arrays (nop for other types)
+   stringnumber: make "1" equal 1
 */
 type ruleAction int
 
@@ -48,6 +70,7 @@ const (
 	ignoreIfZero
 	floatEqual
 	ignoreOrder
+	stringNumber
 )
 
 // FloatEqualFn is a function comparing two floats
@@ -177,6 +200,8 @@ func (d *Differ) AddIgnoreIfZero(dest ruleDest, selector *regexp.Regexp) *Differ
 	return d.addRule(dest, &rule{selector: selector, action: ignoreIfZero})
 }
 
+// AddFloatEqual adds a function for comparing floats. Default function expects
+// numbers to be the same up to 1e-9
 func (d *Differ) AddFloatEqual(selector *regexp.Regexp, fn FloatEqualFunc) *Differ {
 	return d.addRule(RuleAB, &rule{selector: selector, action: floatEqual, floatEqualFunc: fn})
 }
@@ -184,6 +209,11 @@ func (d *Differ) AddFloatEqual(selector *regexp.Regexp, fn FloatEqualFunc) *Diff
 // AddIgnoreRule ignores order of arrays, so [1, 2, 3] == [3, 2, 1]
 func (d *Differ) AddIgnoreOrder(selector *regexp.Regexp) *Differ {
 	return d.addRule(RuleAB, &rule{selector: selector, action: ignoreOrder})
+}
+
+// AddStringNumber equals "1" == 1
+func (d *Differ) AddStringNumber(selector *regexp.Regexp) *Differ {
+	return d.addRule(RuleAB, &rule{selector: selector, action: stringNumber})
 }
 
 func (r *rule) match(selector string) bool {
@@ -212,12 +242,16 @@ func (d *SingleDiff) B() string {
 type DiffList []SingleDiff
 type rules []*rule
 
+// Differ traverse through JSONS and diff each part. It stores actual
+// differences and can apply rules to different parts for comparison
 type Differ struct {
 	diff   DiffList
 	rulesA rules
 	rulesB rules
 }
 
+// NewDiffer creates new empty differ with no rules. It can get additional
+// processing rules via AddXYZ methods
 func NewDiffer() *Differ {
 	return &Differ{
 		diff:   make(DiffList, 0, 64),
@@ -336,6 +370,11 @@ func (d *Differ) shouldIgnoreOrder(selector string) bool {
 	return a
 }
 
+func (d *Differ) shouldConvertStringToNumber(selector string) bool {
+	a, _ := d.matchRule(selector, stringNumber)
+	return a
+}
+
 // mustFloat64 unpack int of float64 as float64
 func mustFloat64(v *objx.Value) float64 {
 	if v.IsInt() {
@@ -352,6 +391,28 @@ func float64OrZero(v *objx.Value) float64 {
 	return v.Float64(0.0)
 }
 
+// tryAsNumber parse "1" or "1.1" as int/float64 and return *objx.Value
+// with a proper type. If it can't be parsed, it returns original value
+func tryAsNumber(valueA *objx.Value) *objx.Value {
+	if !valueA.IsStr() {
+		return valueA
+	}
+	aStr := valueA.MustStr()
+	isNumber := false
+	if strings.Contains(aStr, ".") {
+		_, err := strconv.ParseFloat(aStr, 64)
+		isNumber = err == nil
+	} else {
+		_, err := strconv.Atoi(aStr)
+		isNumber = err == nil
+	}
+
+	if !isNumber {
+		return valueA
+	}
+	return objx.MustFromJSON(fmt.Sprintf(`{"a": %s}`, aStr)).Get("a")
+}
+
 func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 
 	// 1. coercion rules can solve nil case
@@ -359,6 +420,12 @@ func (d *Differ) diffValues(selector string, valueA, valueB *objx.Value) error {
 	if (shouldCoerceA && valueA.IsNil()) ||
 		(shouldCoerceB && valueB.IsNil()) {
 		return d.diffValuesCoerced(selector, valueA, valueB, shouldCoerceA, shouldCoerceB)
+	}
+
+	// try to parse number as string to number
+	if d.shouldConvertStringToNumber(selector) {
+		valueA = tryAsNumber(valueA)
+		valueB = tryAsNumber(valueB)
 	}
 
 	// coerce ints and floats by default

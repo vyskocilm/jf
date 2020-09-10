@@ -357,3 +357,25 @@ func TestIgnoreOrder(t *testing.T) {
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
+
+// test number equal number
+func TestStringNumber(t *testing.T) {
+	const jsonA = `{
+        "int": "1",
+        "float": "11.11",
+        "notnumber": "a"
+    }
+    `
+	const jsonB = `{
+        "int": 1,
+        "float": 11.11,
+        "notnumber": "a"
+    }
+    `
+	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
+
+	assert := assert.New(t)
+	lines, err := NewDiffer().AddStringNumber(re(".*")).Diff(jsonA, jsonB)
+	assert.NoError(err)
+	assert.Len(lines, 0)
+}
