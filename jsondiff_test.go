@@ -6,7 +6,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func re(t *testing.T, s string) *regexp.Regexp {
+	t.Helper()
+	re, err := regexp.Compile(s)
+	require.NoError(t, err)
+	return re
+}
 
 // TestSimpleMap tests diff handling of primitive types (int/string) and slices
 func TestSimpleMap(t *testing.T) {
@@ -182,21 +190,19 @@ func TestCoerceNull(t *testing.T) {
     }`
 
 	assert := assert.New(t)
-	dotStar, err := regexp.Compile(".*")
-	assert.NoError(err)
 
 	// 1. no coercion, return one line: see TestNil
 	// 2. coercion of A, return 0 lines
-	lines, err := NewDiffer().AddCoerceNull(RuleA, dotStar).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddCoerceNull(RuleA, re(t, `.*`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 	// 3. coercion of B, return 1 line
-	lines, err = NewDiffer().AddCoerceNull(RuleB, dotStar).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddCoerceNull(RuleB, re(t, `.*`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
 	assert.Equal(SingleDiff{"key", "null", "0"}, lines[0])
 	// 3. coercion of A/B, return 0 lines
-	lines, err = NewDiffer().AddCoerceNull(RuleAB, dotStar).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddCoerceNull(RuleAB, re(t, `.*`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -217,10 +223,7 @@ func TestCoerceNullMatch(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-	keyDotSubkey1, err := regexp.Compile(`key\.subkey1`)
-	assert.NoError(err)
-
-	lines, err := NewDiffer().AddCoerceNull(RuleA, keyDotSubkey1).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddCoerceNull(RuleA, re(t, `key\.subkey1`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
 	assert.Equal(SingleDiff{"key.subkey2", "null", "0"}, lines[0])
@@ -236,15 +239,12 @@ func TestIgnore(t *testing.T) {
     }`
 	assert := assert.New(t)
 
-	additional, err := regexp.Compile("additional")
-	assert.NoError(err)
-
-	lines, err := NewDiffer().AddIgnore(RuleA, additional).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddIgnore(RuleA, re(t, `additional`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 1)
 	assert.Equal(SingleDiff{"additional", "", "42"}, lines[0])
 
-	lines, err = NewDiffer().AddIgnore(RuleB, additional).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddIgnore(RuleB, re(t, `additional`)).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -262,15 +262,13 @@ func TestIgnoreZero(t *testing.T) {
 	const jsonB = `{
     }`
 
-	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
-
 	assert := assert.New(t)
 	lines, err := NewDiffer().
-		AddIgnoreIfZero(RuleA, re("number")).
-		AddIgnoreIfZero(RuleA, re("string")).
-		AddIgnoreIfZero(RuleA, re("strings")).
-		AddIgnoreIfZero(RuleA, re("objects")).
-		AddIgnoreIfZero(RuleA, re("bool")).
+		AddIgnoreIfZero(RuleA, re(t, "number")).
+		AddIgnoreIfZero(RuleA, re(t, "string")).
+		AddIgnoreIfZero(RuleA, re(t, "strings")).
+		AddIgnoreIfZero(RuleA, re(t, "objects")).
+		AddIgnoreIfZero(RuleA, re(t, "bool")).
 		Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
@@ -290,7 +288,6 @@ func TestFloatEqual(t *testing.T) {
         "floatm": {"first": 1234.1}
     }
     `
-	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
 
 	assert := assert.New(t)
 	lines, err := Diff(jsonA, jsonB)
@@ -303,7 +300,7 @@ func TestFloatEqual(t *testing.T) {
 		return ret
 	}
 
-	lines, err = NewDiffer().AddFloatEqual(re(".*"), eq).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddFloatEqual(re(t, ".*"), eq).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -322,8 +319,6 @@ func TestFloatIntEqual(t *testing.T) {
         "floatm": {"first": 1234}
     }
     `
-	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
-
 	assert := assert.New(t)
 	lines, err := Diff(jsonA, jsonB)
 	assert.NoError(err)
@@ -335,7 +330,7 @@ func TestFloatIntEqual(t *testing.T) {
 		return ret
 	}
 
-	lines, err = NewDiffer().AddFloatEqual(re(".*"), eq).Diff(jsonA, jsonB)
+	lines, err = NewDiffer().AddFloatEqual(re(t, ".*"), eq).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -350,10 +345,8 @@ func TestIgnoreOrder(t *testing.T) {
         "list": [3, 2, 1]
     }
     `
-	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
-
 	assert := assert.New(t)
-	lines, err := NewDiffer().AddIgnoreOrder(re("list")).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddIgnoreOrder(re(t, "list")).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
@@ -372,10 +365,8 @@ func TestStringNumber(t *testing.T) {
         "notnumber": "a"
     }
     `
-	re := func(s string) *regexp.Regexp { return regexp.MustCompile(s) }
-
 	assert := assert.New(t)
-	lines, err := NewDiffer().AddStringNumber(re(".*")).Diff(jsonA, jsonB)
+	lines, err := NewDiffer().AddStringNumber(re(t, ".*")).Diff(jsonA, jsonB)
 	assert.NoError(err)
 	assert.Len(lines, 0)
 }
