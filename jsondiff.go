@@ -499,7 +499,7 @@ skipTypeCheck:
 		if strA != strB {
 			d.lineAB("", selector, jsonI{i: valueA}, jsonI{i: valueB})
 		}
-	case valueA.IsObjxMapSlice():
+	case valueA.IsObjxMapSlice() && valueB.IsObjxMapSlice():
 		err := d.diffObjxMapSlice(selector, valueA.MustObjxMapSlice(), valueB.MustObjxMapSlice())
 		if err != nil {
 			return err
@@ -509,7 +509,7 @@ skipTypeCheck:
 		if err != nil {
 			return err
 		}
-	case valueA.IsObjxMap():
+	case valueA.IsObjxMap() && valueB.IsObjxMap():
 		mA := valueA.MustObjxMap()
 		mB := valueB.MustObjxMap()
 		err := d.diffMap(selector, mA, mB)
